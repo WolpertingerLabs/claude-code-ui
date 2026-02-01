@@ -1,9 +1,28 @@
 import { Router } from 'express';
 import { v4 as uuid } from 'uuid';
-import { readFileSync, existsSync } from 'fs';
+import { readFileSync, existsSync, readdirSync } from 'fs';
+import { homedir } from 'os';
+import { join } from 'path';
 import db from '../db.js';
 
 export const chatsRouter = Router();
+
+const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+
+/**
+ * Find the session JSONL file in ~/.claude/projects/.
+ * The SDK names project dirs by replacing / with - in the cwd.
+ * We search all project dirs for the session ID since the SDK may
+ * resolve the cwd differently than what we passed.
+ */
+function findSessionLogPath(sessionId: string): string | null {
+  if (!existsSync(CLAUDE_PROJECTS_DIR)) return null;
+  for (const dir of readdirSync(CLAUDE_PROJECTS_DIR)) {
+    const candidate = join(CLAUDE_PROJECTS_DIR, dir, `${sessionId}.jsonl`);
+    if (existsSync(candidate)) return candidate;
+  }
+  return null;
+}
 
 // List all chats
 chatsRouter.get('/', (_req, res) => {
@@ -43,12 +62,15 @@ chatsRouter.get('/:id', (req, res) => {
 chatsRouter.get('/:id/messages', (req, res) => {
   const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(req.params.id) as any;
   if (!chat) return res.status(404).json({ error: 'Not found' });
-  if (!chat.session_log_path || !existsSync(chat.session_log_path)) {
-    return res.json([]);
-  }
+  if (!chat.session_id) return res.json([]);
+
+  // Always derive path from session_id (it may change across resumes)
+  const logPath = findSessionLogPath(chat.session_id);
+
+  if (!logPath || !existsSync(logPath)) return res.json([]);
 
   try {
-    const content = readFileSync(chat.session_log_path, 'utf-8');
+    const content = readFileSync(logPath, 'utf-8');
     const messages = content
       .split('\n')
       .filter(line => line.trim())
