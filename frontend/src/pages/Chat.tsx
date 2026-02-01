@@ -1,7 +1,6 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getChat, getMessages, type Chat as ChatType, type ParsedMessage } from '../api';
-import { useStream } from '../hooks/useStream';
 import MessageBubble from '../components/MessageBubble';
 import PromptInput from '../components/PromptInput';
 
@@ -9,28 +8,90 @@ export default function Chat() {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [chat, setChat] = useState<ChatType | null>(null);
-  const [history, setHistory] = useState<ParsedMessage[]>([]);
-  const { streaming, streamMessages, setStreamMessages, send, stop } = useStream(id!);
+  const [messages, setMessages] = useState<ParsedMessage[]>([]);
+  const [streaming, setStreaming] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     getChat(id!).then(setChat);
-    getMessages(id!).then(setHistory);
+    getMessages(id!).then(setMessages);
   }, [id]);
-
-  const allMessages = [...history, ...streamMessages];
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [allMessages.length]);
+  }, [messages.length]);
 
-  const handleSend = async (prompt: string) => {
-    await send(prompt);
-    // After stream ends, reload history and clear stream messages
-    const msgs = await getMessages(id!);
-    setHistory(msgs);
-    setStreamMessages([]);
-  };
+  const handleSend = useCallback(async (prompt: string) => {
+    setStreaming(true);
+    setMessages(prev => [...prev, { role: 'user', type: 'text', content: prompt }]);
+
+    const controller = new AbortController();
+    abortRef.current = controller;
+
+    try {
+      const res = await fetch(`/api/chats/${id}/message`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ prompt }),
+        signal: controller.signal,
+      });
+
+      if (!res.ok || !res.body) {
+        setStreaming(false);
+        return;
+      }
+
+      const reader = res.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        buffer += decoder.decode(value, { stream: true });
+        const lines = buffer.split('\n');
+        buffer = lines.pop() || '';
+
+        for (const line of lines) {
+          if (!line.startsWith('data: ')) continue;
+          try {
+            const event = JSON.parse(line.slice(6));
+            if (event.type === 'done') {
+              setStreaming(false);
+              return;
+            }
+            if (event.type === 'error') {
+              setMessages(prev => [...prev, { role: 'assistant', type: 'text', content: `Error: ${event.content}` }]);
+              setStreaming(false);
+              return;
+            }
+            setMessages(prev => [...prev, {
+              role: 'assistant',
+              type: event.type,
+              content: event.content,
+              toolName: event.toolName,
+            }]);
+          } catch {}
+        }
+      }
+    } catch (err: any) {
+      if (err.name !== 'AbortError') {
+        setMessages(prev => [...prev, { role: 'assistant', type: 'text', content: `Error: ${err.message}` }]);
+      }
+    } finally {
+      setStreaming(false);
+      abortRef.current = null;
+    }
+  }, [id]);
+
+  const handleStop = useCallback(() => {
+    abortRef.current?.abort();
+    fetch(`/api/chats/${id}/stop`, { method: 'POST', credentials: 'include' });
+    setStreaming(false);
+  }, [id]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -58,7 +119,7 @@ export default function Chat() {
         </div>
         {streaming && (
           <button
-            onClick={stop}
+            onClick={handleStop}
             style={{
               background: 'var(--danger)',
               color: '#fff',
@@ -73,12 +134,12 @@ export default function Chat() {
       </header>
 
       <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
-        {allMessages.length === 0 && !streaming && (
+        {messages.length === 0 && !streaming && (
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>
             Send a message to start coding.
           </p>
         )}
-        {allMessages.map((msg, i) => (
+        {messages.map((msg, i) => (
           <MessageBubble key={i} message={msg} />
         ))}
         {streaming && (

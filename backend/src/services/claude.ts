@@ -1,5 +1,7 @@
 import { query } from '@anthropic-ai/claude-code';
 import { EventEmitter } from 'events';
+import { homedir } from 'os';
+import { join } from 'path';
 import db from '../db.js';
 
 export interface StreamEvent {
@@ -61,9 +63,11 @@ export async function sendMessage(chatId: string, prompt: string): Promise<Event
 
         if ('session_id' in message && message.session_id && !sessionId) {
           sessionId = message.session_id as string;
-          const logPath = `${chat.folder}/.claude/sessions/${sessionId}.jsonl`;
-          db.prepare('UPDATE chats SET session_id = ?, session_log_path = ?, updated_at = ? WHERE id = ?')
-            .run(sessionId, logPath, new Date().toISOString(), chatId);
+          // SDK stores sessions at ~/.claude/projects/{cwd-with-slashes-as-dashes}/{sessionId}.jsonl
+          // The cwd in the session may differ from chat.folder (SDK resolves it)
+          // We'll compute the log path after we see the cwd from messages, or use a glob fallback
+          db.prepare('UPDATE chats SET session_id = ?, updated_at = ? WHERE id = ?')
+            .run(sessionId, new Date().toISOString(), chatId);
         }
 
         if (message.type === 'assistant') {
