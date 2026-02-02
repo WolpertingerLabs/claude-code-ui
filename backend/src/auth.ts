@@ -1,11 +1,9 @@
-import { randomBytes, createHash } from 'crypto';
+import { randomBytes } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
+import db from './db.js';
 
 const PASSWORD = process.env.AUTH_PASSWORD || 'REDACTED_PASSWORD';
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
-
-// In-memory session store
-const sessions = new Map<string, { expiresAt: number }>();
 
 // Rate limiting: track attempts per IP
 const attempts = new Map<string, { count: number; resetAt: number }>();
@@ -28,6 +26,10 @@ function checkRateLimit(ip: string): boolean {
   return true;
 }
 
+function getSession(token: string): { token: string; expires_at: number } | undefined {
+  return db.prepare('SELECT * FROM sessions WHERE token = ?').get(token) as any;
+}
+
 export function loginHandler(req: Request, res: Response) {
   const ip = getClientIp(req);
   if (!checkRateLimit(ip)) {
@@ -40,7 +42,7 @@ export function loginHandler(req: Request, res: Response) {
   }
 
   const token = randomBytes(32).toString('hex');
-  sessions.set(token, { expiresAt: Date.now() + SESSION_TTL_MS });
+  db.prepare('INSERT INTO sessions (token, expires_at) VALUES (?, ?)').run(token, Date.now() + SESSION_TTL_MS);
 
   res.cookie('session', token, {
     httpOnly: true,
@@ -53,7 +55,7 @@ export function loginHandler(req: Request, res: Response) {
 
 export function logoutHandler(_req: Request, res: Response) {
   const token = _req.cookies?.session;
-  if (token) sessions.delete(token);
+  if (token) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
   res.clearCookie('session', { path: '/' });
   res.json({ ok: true });
 }
@@ -61,9 +63,9 @@ export function logoutHandler(_req: Request, res: Response) {
 export function checkAuthHandler(req: Request, res: Response) {
   const token = req.cookies?.session;
   if (!token) return res.json({ authenticated: false });
-  const entry = sessions.get(token);
-  if (!entry || Date.now() > entry.expiresAt) {
-    sessions.delete(token);
+  const entry = getSession(token);
+  if (!entry || Date.now() > entry.expires_at) {
+    if (entry) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return res.json({ authenticated: false });
   }
   res.json({ authenticated: true });
@@ -78,9 +80,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
   const token = req.cookies?.session;
   if (!token) return res.status(401).json({ error: 'Not authenticated' });
 
-  const entry = sessions.get(token);
-  if (!entry || Date.now() > entry.expiresAt) {
-    sessions.delete(token);
+  const entry = getSession(token);
+  if (!entry || Date.now() > entry.expires_at) {
+    if (entry) db.prepare('DELETE FROM sessions WHERE token = ?').run(token);
     return res.status(401).json({ error: 'Session expired' });
   }
 
