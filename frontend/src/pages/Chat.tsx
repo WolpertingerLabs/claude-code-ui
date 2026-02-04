@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
+import { RotateCw } from 'lucide-react';
 import { getChat, getMessages, getPending, respondToChat, getSessionStatus, uploadImages, type Chat as ChatType, type ParsedMessage, type SessionStatus } from '../api';
 import MessageBubble from '../components/MessageBubble';
 import PromptInput from '../components/PromptInput';
