@@ -1,5 +1,5 @@
 import { useState, useRef, useCallback } from 'react';
-import { ArrowUp } from 'lucide-react';
+import { ArrowUp, Paperclip, Edit } from 'lucide-react';
 import ImageUpload from './ImageUpload';
 
 interface Props {
