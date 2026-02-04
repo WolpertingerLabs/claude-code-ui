@@ -82,38 +82,87 @@ function discoverAllSessions(): { sessionId: string; folder: string; filePath: s
   return results;
 }
 
-// List all chats (DB chats + untracked sessions from filesystem)
+// List all chats (pull from log directories, augment with DB records)
 chatsRouter.get('/', (_req, res) => {
+  // Get all DB chats for augmentation lookup
   const dbChats = db.prepare('SELECT * FROM chats ORDER BY updated_at DESC').all() as any[];
 
-  // Collect all session IDs already tracked in the DB
-  const trackedSessionIds = new Set<string>();
+  // Create lookup maps for DB data
+  const dbChatsBySessionId = new Map<string, any>();
+  const dbChatsByFolder = new Map<string, any>();
+
   for (const chat of dbChats) {
-    if (chat.session_id) trackedSessionIds.add(chat.session_id);
+    // Index by session_id
+    if (chat.session_id) {
+      dbChatsBySessionId.set(chat.session_id, chat);
+    }
+
+    // Index by folder path
+    dbChatsByFolder.set(chat.folder, chat);
+
+    // Also index by session_ids in metadata
     try {
       const meta = JSON.parse(chat.metadata || '{}');
       if (Array.isArray(meta.session_ids)) {
-        for (const sid of meta.session_ids) trackedSessionIds.add(sid);
+        for (const sid of meta.session_ids) {
+          dbChatsBySessionId.set(sid, chat);
+        }
       }
     } catch {}
   }
 
-  // Discover untracked sessions from the filesystem
+  // Discover all sessions from filesystem and augment with DB data
   const allSessions = discoverAllSessions();
-  const untrackedChats = allSessions
-    .filter(s => !trackedSessionIds.has(s.sessionId))
-    .map(s => ({
-      id: s.sessionId,
-      folder: s.folder,
-      session_id: s.sessionId,
-      session_log_path: s.filePath,
-      metadata: JSON.stringify({ session_ids: [s.sessionId] }),
-      created_at: s.createdAt.toISOString(),
-      updated_at: s.updatedAt.toISOString(),
-      _from_filesystem: true,
-    }));
+  const chatsFromLogs = allSessions.map(s => {
+    // First try to find by session ID
+    let dbChat = dbChatsBySessionId.get(s.sessionId);
 
-  const allChats = [...dbChats, ...untrackedChats]
+    // If not found by session ID, try to find by folder path
+    if (!dbChat) {
+      dbChat = dbChatsByFolder.get(s.folder);
+    }
+
+    if (dbChat) {
+      // Augment with DB data while keeping filesystem as source of truth for timestamps
+      return {
+        ...dbChat,
+        // Keep filesystem timestamps as they're more accurate for actual activity
+        created_at: s.createdAt.toISOString(),
+        updated_at: s.updatedAt.toISOString(),
+        // Ensure session info from filesystem
+        session_id: s.sessionId,
+        session_log_path: s.filePath,
+        // Merge session_ids in metadata
+        metadata: (() => {
+          try {
+            const meta = JSON.parse(dbChat.metadata || '{}');
+            const sessionIds = Array.isArray(meta.session_ids) ? meta.session_ids : [];
+            if (!sessionIds.includes(s.sessionId)) {
+              sessionIds.push(s.sessionId);
+            }
+            return JSON.stringify({ ...meta, session_ids: sessionIds });
+          } catch {
+            return JSON.stringify({ session_ids: [s.sessionId] });
+          }
+        })(),
+        _augmented_from_db: true,
+      };
+    } else {
+      // No DB record found, create from filesystem only
+      return {
+        id: s.sessionId,
+        folder: s.folder,
+        session_id: s.sessionId,
+        session_log_path: s.filePath,
+        metadata: JSON.stringify({ session_ids: [s.sessionId] }),
+        created_at: s.createdAt.toISOString(),
+        updated_at: s.updatedAt.toISOString(),
+        _from_filesystem: true,
+      };
+    }
+  });
+
+  const allChats = chatsFromLogs
     .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
 
   res.json(allChats);
