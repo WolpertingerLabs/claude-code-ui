@@ -25,6 +25,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftMessage, setDraftMessage] = useState('');
+  const [inFlightMessage, setInFlightMessage] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasReceivedFirstResponseRef = useRef<boolean>(false);
@@ -51,6 +52,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
             if (event.type === 'message_complete') {
               setStreaming(false);
+              setInFlightMessage(null); // Clear in-flight message
               // Refetch complete chat data and messages
               getChat(id!).then(setChat);
               getMessages(id!).then(setMessages);
@@ -59,6 +61,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
             if (event.type === 'message_error') {
               setStreaming(false);
+              setInFlightMessage(null); // Clear in-flight message
               // Refetch messages to show any partial content, then add error
               getMessages(id!).then(msgs => {
                 setMessages([...msgs, { role: 'assistant', type: 'text', content: `Error: ${event.content}` }]);
@@ -67,6 +70,8 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             }
 
             if (event.type === 'message_update') {
+              // Clear in-flight message once we get the first response
+              setInFlightMessage(null);
               // New content is available - refetch all messages to show latest state with timestamps
               getMessages(id!).then(setMessages);
 
@@ -94,6 +99,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       }
     } finally {
       setStreaming(false);
+      setInFlightMessage(null); // Clear in-flight message if streaming stops
     }
   }, [id]);
 
@@ -163,7 +169,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [messages.length]);
+  }, [messages.length, inFlightMessage]);
 
   const handleSend = useCallback(async (prompt: string, images?: File[]) => {
     // Handle image upload first if images are provided
@@ -183,7 +189,8 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       }
     }
 
-    // Don't add user message immediately - let the refetch handle showing complete conversation with timestamps
+    // Set in-flight message to show user's message immediately
+    setInFlightMessage(prompt);
     setNetworkError(null); // Clear any previous network errors
 
     // Track directory usage when sending message
@@ -225,11 +232,13 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       if (err.name !== 'AbortError') {
         setNetworkError('network error');
         setStreaming(false);
+        setInFlightMessage(null); // Clear in-flight message on error
       }
     } finally {
       // Only stop streaming if this is still the current request
       if (abortRef.current === controller) {
         setStreaming(false);
+        setInFlightMessage(null); // Clear in-flight message when done
         abortRef.current = null;
       }
     }
@@ -250,6 +259,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     abortRef.current?.abort();
     fetch(`/api/chats/${id}/stop`, { method: 'POST', credentials: 'include' });
     setStreaming(false);
+    setInFlightMessage(null); // Clear in-flight message when stopping
     setPendingAction(null);
   }, [id]);
 
@@ -414,6 +424,37 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             <MessageBubble message={msg} />
           </div>
         ))}
+        {inFlightMessage && (
+          <div style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-end',
+            margin: '6px 0',
+          }}>
+            <div style={{
+              maxWidth: '85%',
+              padding: '10px 14px',
+              borderRadius: 'var(--radius)',
+              background: 'var(--user-bg)',
+              border: '1px solid transparent',
+              fontSize: 14,
+              lineHeight: 1.5,
+              wordBreak: 'break-word',
+              opacity: 0.7,
+            }}>
+              {inFlightMessage}
+            </div>
+            <div style={{
+              fontSize: 10,
+              color: 'var(--text-muted)',
+              opacity: 0.5,
+              marginTop: 4,
+              textAlign: 'right' as const,
+            }}>
+              Sending...
+            </div>
+          </div>
+        )}
         {networkError && (
           <div style={{
             color: 'var(--danger)',
