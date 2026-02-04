@@ -1,5 +1,9 @@
 # Claude Code UI
 
+## Development
+
+- When running the development server, always run it in the background using `run_in_background: true` so you can test the functionality while it's running
+
 ## Production Deployment
 
 - Production runs on port 8000 via PM2
