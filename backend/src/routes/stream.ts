@@ -5,7 +5,7 @@ import { ImageStorageService } from '../services/image-storage.js';
 import { statSync, existsSync, readdirSync, watchFile, unwatchFile, readFileSync, openSync, readSync, closeSync } from 'fs';
 import { join, dirname } from 'path';
 import { homedir } from 'os';
-import db from '../db.js';
+import { chatFileService } from '../services/chat-file-service.js';
 
 export const streamRouter = Router();
 
@@ -29,8 +29,8 @@ function findSessionLogPath(sessionId: string): string | null {
  * Find chat by ID, checking DB first then filesystem like in chats.ts
  */
 function findChatForStatus(id: string): any | null {
-  const dbChat = db.prepare('SELECT * FROM chats WHERE id = ?').get(id);
-  if (dbChat) return dbChat;
+  const fileChat = chatFileService.getChat(id);
+  if (fileChat) return fileChat;
 
   // Try filesystem: id might be a session ID
   const logPath = findSessionLogPath(id);
@@ -54,7 +54,7 @@ async function generateAndSaveTitle(chatId: string, prompt: string): Promise<voi
   const client = new OpenRouterClient(apiKey);
   if (!client.isReady()) return;
 
-  const chat = db.prepare('SELECT metadata FROM chats WHERE id = ?').get(chatId) as { metadata: string } | undefined;
+  const chat = chatFileService.getChat(chatId);
   if (!chat) return;
 
   const meta = JSON.parse(chat.metadata || '{}');
@@ -63,12 +63,13 @@ async function generateAndSaveTitle(chatId: string, prompt: string): Promise<voi
   const result = await client.generateChatTitle({ userMessage: prompt });
   if (result.success && result.content) {
     // Re-read metadata to avoid race condition with slash commands being saved
-    const latestChat = db.prepare('SELECT metadata FROM chats WHERE id = ?').get(chatId) as { metadata: string } | undefined;
+    const latestChat = chatFileService.getChat(chatId);
     const latestMeta = latestChat ? JSON.parse(latestChat.metadata || '{}') : {};
 
     latestMeta.title = result.content;
-    db.prepare('UPDATE chats SET metadata = ?, updated_at = ? WHERE id = ?')
-      .run(JSON.stringify(latestMeta), new Date().toISOString(), chatId);
+    chatFileService.updateChat(chatId, {
+      metadata: JSON.stringify(latestMeta)
+    });
     console.log(`[OpenRouter] Generated title for ${chatId}: "${result.content}"`);
   } else {
     console.warn('[OpenRouter] Title generation failed:', result.error);
@@ -168,7 +169,7 @@ streamRouter.post('/:id/message', async (req, res) => {
  * Store image metadata for a message in chat metadata
  */
 async function storeMessageImages(chatId: string, imageIds: string[]): Promise<void> {
-  const chat = db.prepare('SELECT metadata FROM chats WHERE id = ?').get(chatId) as { metadata: string } | undefined;
+  const chat = chatFileService.getChat(chatId);
 
   if (!chat) {
     console.warn(`Chat ${chatId} not found in database, skipping image metadata storage`);
@@ -191,8 +192,9 @@ async function storeMessageImages(chatId: string, imageIds: string[]): Promise<v
   };
 
   // Update the chat metadata
-  db.prepare('UPDATE chats SET metadata = ?, updated_at = ? WHERE id = ?')
-    .run(JSON.stringify(metadata), new Date().toISOString(), chatId);
+  chatFileService.updateChat(chatId, {
+    metadata: JSON.stringify(metadata)
+  });
 }
 
 // SSE endpoint for connecting to an active stream (web or CLI)

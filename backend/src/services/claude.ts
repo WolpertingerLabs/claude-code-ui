@@ -4,7 +4,7 @@ import { EventEmitter } from 'events';
 import { appendFileSync, mkdirSync } from 'fs';
 import { join, dirname } from 'path';
 import { fileURLToPath } from 'url';
-import db from '../db.js';
+import { chatFileService } from './chat-file-service.js';
 import { setSlashCommandsForDirectory } from './slashCommands.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -131,7 +131,7 @@ export function stopSession(chatId: string): boolean {
 }
 
 export async function sendMessage(chatId: string, prompt: string | any, imageMetadata?: { buffer: Buffer; mimeType: string }[]): Promise<EventEmitter> {
-  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId) as any;
+  const chat = chatFileService.getChat(chatId);
   if (!chat) throw new Error('Chat not found');
 
   // Stop any existing session for this chat (web or CLI monitoring)
@@ -324,8 +324,10 @@ export async function sendMessage(chatId: string, prompt: string | any, imageMet
           const ids: string[] = meta.session_ids || [];
           if (!ids.includes(sessionId)) ids.push(sessionId);
           meta.session_ids = ids;
-          db.prepare('UPDATE chats SET session_id = ?, metadata = ?, updated_at = ? WHERE id = ?')
-            .run(sessionId, JSON.stringify(meta), new Date().toISOString(), chatId);
+          chatFileService.updateChat(chatId, {
+            session_id: sessionId,
+            metadata: JSON.stringify(meta)
+          });
         }
 
         const blocks = (message as any).message?.content || [];
@@ -357,8 +359,7 @@ export async function sendMessage(chatId: string, prompt: string | any, imageMet
         }
       }
 
-      db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?')
-        .run(new Date().toISOString(), chatId);
+      chatFileService.updateChat(chatId, {});
       emitter.emit('event', { type: 'done', content: '' } as StreamEvent);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
@@ -374,7 +375,7 @@ export async function sendMessage(chatId: string, prompt: string | any, imageMet
 }
 
 export async function sendSlashCommand(chatId: string, command: string): Promise<EventEmitter> {
-  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(chatId) as any;
+  const chat = chatFileService.getChat(chatId);
   if (!chat) throw new Error('Chat not found');
 
   // Stop any existing session for this chat
@@ -497,8 +498,10 @@ export async function sendSlashCommand(chatId: string, command: string): Promise
           const ids: string[] = meta.session_ids || [];
           if (!ids.includes(sessionId)) ids.push(sessionId);
           meta.session_ids = ids;
-          db.prepare('UPDATE chats SET session_id = ?, metadata = ?, updated_at = ? WHERE id = ?')
-            .run(sessionId, JSON.stringify(meta), new Date().toISOString(), chatId);
+          chatFileService.updateChat(chatId, {
+            session_id: sessionId,
+            metadata: JSON.stringify(meta)
+          });
         }
 
         const blocks = (message as any).message?.content || [];
@@ -530,8 +533,7 @@ export async function sendSlashCommand(chatId: string, command: string): Promise
         }
       }
 
-      db.prepare('UPDATE chats SET updated_at = ? WHERE id = ?')
-        .run(new Date().toISOString(), chatId);
+      chatFileService.updateChat(chatId, {});
       emitter.emit('event', { type: 'done', content: '' } as StreamEvent);
     } catch (err: any) {
       if (err.name !== 'AbortError') {
