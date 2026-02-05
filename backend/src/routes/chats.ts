@@ -3,7 +3,7 @@ import { v4 as uuid } from 'uuid';
 import { readFileSync, existsSync, readdirSync, statSync } from 'fs';
 import { homedir } from 'os';
 import { join } from 'path';
-import db from '../db.js';
+import { chatFileService } from '../services/chat-file-service.js';
 import { getSlashCommandsForDirectory } from '../services/slashCommands.js';
 import { getGitInfo } from '../utils/git.js';
 
@@ -84,146 +84,86 @@ function discoverAllSessions(): { sessionId: string; folder: string; filePath: s
   return results;
 }
 
-// List all chats (pull from log directories, augment with DB records)
+// List all chats (pull from file storage, augment with filesystem session data)
 chatsRouter.get('/', (req, res) => {
-  // Get all DB chats for augmentation lookup
-  const dbChats = db.prepare('SELECT * FROM chats ORDER BY updated_at DESC').all() as any[];
+  // Handle pagination
+  const limit = parseInt(req.query.limit as string) || undefined;
+  const offset = parseInt(req.query.offset as string) || undefined;
 
-  // Create lookup map for DB data by session ID only
-  const dbChatsBySessionId = new Map<string, any>();
+  // Get all chats from file storage
+  const fileChats = chatFileService.getAllChats(limit, offset);
 
-  for (const chat of dbChats) {
-    // Index by session_id
-    if (chat.session_id) {
-      dbChatsBySessionId.set(chat.session_id, chat);
-    }
+  // Augment with session log paths and git info
+  const augmentedChats = fileChats.map(chat => {
+    const sessionLogPath = findSessionLogPath(chat.session_id);
+    const gitInfo = getGitInfo(chat.folder);
 
-    // Also index by session_ids in metadata
-    try {
-      const meta = JSON.parse(chat.metadata || '{}');
-      if (Array.isArray(meta.session_ids)) {
-        for (const sid of meta.session_ids) {
-          dbChatsBySessionId.set(sid, chat);
-        }
-      }
-    } catch {}
-  }
-
-  // Discover all sessions from filesystem and augment with DB data
-  const allSessions = discoverAllSessions();
-  const chatsFromLogs = allSessions.map(s => {
-    // Try to find by session ID
-    const dbChat = dbChatsBySessionId.get(s.sessionId);
-
-    // Get git info for the folder
-    const gitInfo = getGitInfo(s.folder);
-
-    if (dbChat) {
-      // Augment with DB data while keeping filesystem as source of truth for timestamps
-      return {
-        ...dbChat,
-        // Keep filesystem timestamps as they're more accurate for actual activity
-        created_at: s.createdAt.toISOString(),
-        updated_at: s.updatedAt.toISOString(),
-        // Ensure session info from filesystem
-        session_id: s.sessionId,
-        session_log_path: s.filePath,
-        // Add git information
-        is_git_repo: gitInfo.isGitRepo,
-        git_branch: gitInfo.branch,
-        // Merge session_ids in metadata
-        metadata: (() => {
-          try {
-            const meta = JSON.parse(dbChat.metadata || '{}');
-            const sessionIds = Array.isArray(meta.session_ids) ? meta.session_ids : [];
-            if (!sessionIds.includes(s.sessionId)) {
-              sessionIds.push(s.sessionId);
-            }
-            return JSON.stringify({ ...meta, session_ids: sessionIds });
-          } catch {
-            return JSON.stringify({ session_ids: [s.sessionId] });
-          }
-        })(),
-        _augmented_from_db: true,
-      };
-    } else {
-      // No DB record found, create from filesystem only
-      return {
-        id: s.sessionId,
-        folder: s.folder,
-        session_id: s.sessionId,
-        session_log_path: s.filePath,
-        metadata: JSON.stringify({ session_ids: [s.sessionId] }),
-        created_at: s.createdAt.toISOString(),
-        updated_at: s.updatedAt.toISOString(),
-        // Add git information
-        is_git_repo: gitInfo.isGitRepo,
-        git_branch: gitInfo.branch,
-        _from_filesystem: true,
-      };
-    }
+    return {
+      ...chat,
+      session_log_path: sessionLogPath,
+      is_git_repo: gitInfo.isGitRepo,
+      git_branch: gitInfo.branch
+    };
   });
 
-  const allChats = chatsFromLogs
-    .sort((a: any, b: any) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime());
-
-  // Handle pagination
-  const limit = parseInt(req.query.limit as string) || allChats.length;
-  const offset = parseInt(req.query.offset as string) || 0;
-
-  const paginatedChats = allChats.slice(offset, offset + limit);
-  const hasMore = offset + limit < allChats.length;
+  const totalChats = chatFileService.getTotalChats();
+  const hasMore = offset !== undefined && limit !== undefined && offset + limit < totalChats;
 
   res.json({
-    chats: paginatedChats,
+    chats: augmentedChats,
     hasMore,
-    total: allChats.length
+    total: totalChats
   });
 });
 
-// Create a chat
+// Create a chat (requires session_id)
 chatsRouter.post('/', (req, res) => {
-  const { folder, defaultPermissions } = req.body;
+  const { folder, sessionId, defaultPermissions } = req.body;
   if (!folder) return res.status(400).json({ error: 'folder is required' });
-
-  const id = uuid();
-  const now = new Date().toISOString();
+  if (!sessionId) return res.status(400).json({ error: 'sessionId is required' });
 
   // Create metadata with default permissions if provided
   const metadata = {
     ...(defaultPermissions && { defaultPermissions })
   };
 
-  db.prepare('INSERT INTO chats (id, folder, metadata, created_at, updated_at) VALUES (?, ?, ?, ?, ?)')
-    .run(id, folder, JSON.stringify(metadata), now, now);
-
-  const chat = db.prepare('SELECT * FROM chats WHERE id = ?').get(id);
-  res.status(201).json(chat);
+  try {
+    const chat = chatFileService.createChat(folder, sessionId, JSON.stringify(metadata));
+    res.status(201).json(chat);
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // Delete a chat
 chatsRouter.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM chats WHERE id = ?').run(req.params.id);
-  if (result.changes === 0) return res.status(404).json({ error: 'Not found' });
+  const chat = chatFileService.getChat(req.params.id);
+  if (!chat) return res.status(404).json({ error: 'Not found' });
+
+  const deleted = chatFileService.deleteChat(chat.session_id);
+  if (!deleted) return res.status(500).json({ error: 'Failed to delete chat' });
+
   res.json({ ok: true });
 });
 
 /**
- * Look up a chat by ID, checking the DB first then falling back to filesystem.
+ * Look up a chat by ID, checking the file storage first then falling back to filesystem.
  */
 function findChat(id: string): any | null {
-  const dbChat = db.prepare('SELECT * FROM chats WHERE id = ?').get(id) as any;
-  if (dbChat) {
-    // Add git information to DB chats
-    const gitInfo = getGitInfo(dbChat.folder);
+  // Try file storage first
+  const fileChat = chatFileService.getChat(id);
+  if (fileChat) {
+    const logPath = findSessionLogPath(fileChat.session_id);
+    const gitInfo = getGitInfo(fileChat.folder);
     return {
-      ...dbChat,
+      ...fileChat,
+      session_log_path: logPath,
       is_git_repo: gitInfo.isGitRepo,
       git_branch: gitInfo.branch,
     };
   }
 
-  // Try filesystem: id might be a session ID
+  // Try filesystem fallback: id might be a session ID with no file storage
   const logPath = findSessionLogPath(id);
   if (!logPath) return null;
 

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { ImageStorageService, type StoredImage } from '../services/image-storage.js';
-import db from '../db.js';
+import { chatFileService } from '../services/chat-file-service.js';
 
 export const imagesRouter = Router();
 
@@ -144,7 +144,7 @@ imagesRouter.get('/:chatId/images', (req, res) => {
   const { chatId } = req.params;
 
   try {
-    const chat = db.prepare('SELECT metadata FROM chats WHERE id = ?').get(chatId) as { metadata: string } | undefined;
+    const chat = chatFileService.getChat(chatId);
 
     if (!chat) {
       return res.status(404).json({ error: 'Chat not found' });
@@ -173,7 +173,7 @@ imagesRouter.get('/:chatId/images', (req, res) => {
  * Update chat metadata with new images
  */
 async function updateChatWithImages(chatId: string, images: StoredImage[]): Promise<void> {
-  const chat = db.prepare('SELECT metadata FROM chats WHERE id = ?').get(chatId) as { metadata: string } | undefined;
+  const chat = chatFileService.getChat(chatId);
 
   if (!chat) {
     // Chat might not exist in DB if it's from filesystem
@@ -194,15 +194,16 @@ async function updateChatWithImages(chatId: string, images: StoredImage[]): Prom
   metadata.images[messageId] = images;
 
   // Update the chat metadata
-  db.prepare('UPDATE chats SET metadata = ?, updated_at = ? WHERE id = ?')
-    .run(JSON.stringify(metadata), new Date().toISOString(), chatId);
+  chatFileService.updateChat(chatId, {
+    metadata: JSON.stringify(metadata)
+  });
 }
 
 /**
  * Remove an image from all chat metadata
  */
 async function removeImageFromAllChats(imageId: string): Promise<void> {
-  const chats = db.prepare('SELECT id, metadata FROM chats').all() as { id: string; metadata: string }[];
+  const chats = chatFileService.getAllChats();
 
   for (const chat of chats) {
     const metadata = JSON.parse(chat.metadata || '{}');
@@ -226,8 +227,9 @@ async function removeImageFromAllChats(imageId: string): Promise<void> {
       }
 
       if (updated) {
-        db.prepare('UPDATE chats SET metadata = ?, updated_at = ? WHERE id = ?')
-          .run(JSON.stringify(metadata), new Date().toISOString(), chat.id);
+        chatFileService.updateChat(chat.id, {
+          metadata: JSON.stringify(metadata)
+        });
       }
     }
   }
