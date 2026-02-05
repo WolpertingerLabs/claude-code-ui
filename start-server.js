@@ -1,15 +1,19 @@
 #!/usr/bin/env node
 
 import { spawn } from 'child_process';
-import { which } from 'child_process';
 import { promisify } from 'util';
 
-const whichAsync = promisify(which);
+const execAsync = promisify(spawn);
 
 async function checkPM2Available() {
   try {
-    await whichAsync('pm2');
-    return true;
+    // Check if pm2 command exists by trying to run it
+    const checkProcess = spawn('which', ['pm2'], { stdio: 'pipe' });
+    return new Promise((resolve) => {
+      checkProcess.on('exit', (code) => {
+        resolve(code === 0);
+      });
+    });
   } catch (error) {
     return false;
   }
