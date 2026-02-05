@@ -8,14 +8,21 @@ interface Props {
   disabled: boolean;
   onSaveDraft?: (prompt: string, images?: File[], onSuccess?: () => void) => void;
   slashCommands?: string[];
+  onSetValue?: (setValue: (value: string) => void) => void;
 }
 
-export default function PromptInput({ onSend, disabled, onSaveDraft, slashCommands = [] }: Props) {
+export default function PromptInput({ onSend, disabled, onSaveDraft, slashCommands = [], onSetValue }: Props) {
   const [value, setValue] = useState('');
   const [images, setImages] = useState<File[]>([]);
   const [showImageUpload, setShowImageUpload] = useState(false);
   const [showAutocomplete, setShowAutocomplete] = useState(false);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  useEffect(() => {
+    if (onSetValue) {
+      onSetValue(setValue);
+    }
+  }, [onSetValue]);
 
   const handleSend = useCallback(async () => {
     const trimmed = value.trim();
