@@ -29,6 +29,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [inFlightMessage, setInFlightMessage] = useState<string | null>(null);
   const [slashCommands, setSlashCommands] = useState<string[]>([]);
   const [showSlashCommandsModal, setShowSlashCommandsModal] = useState(false);
+  const [promptInputSetValue, setPromptInputSetValue] = useState<((value: string) => void) | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const hasReceivedFirstResponseRef = useRef<boolean>(false);
@@ -343,10 +344,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [draftSuccessCallback, setDraftSuccessCallback] = useState<(() => void) | null>(null);
 
   const handleCommandSelect = useCallback((command: string) => {
-    // For now, we'll just log the command. In the future, this could
-    // insert the command into the prompt input or trigger other actions
-    console.log('Selected command:', command);
-  }, []);
+    if (promptInputSetValue) {
+      promptInputSetValue(command);
+    }
+  }, [promptInputSetValue]);
 
   return (
     <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
@@ -564,7 +565,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       {pendingAction ? (
         <FeedbackPanel action={pendingAction} onRespond={handleRespond} />
       ) : (
-        <PromptInput onSend={handleSend} disabled={false} onSaveDraft={handleSaveDraft} slashCommands={slashCommands} />
+        <PromptInput onSend={handleSend} disabled={false} onSaveDraft={handleSaveDraft} slashCommands={slashCommands} onSetValue={setPromptInputSetValue} />
       )}
 
       <DraftModal
