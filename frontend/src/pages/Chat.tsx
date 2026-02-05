@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
-import { RotateCw, CheckSquare, Square, Slash, ArrowLeft } from 'lucide-react';
+import { RotateCw, CheckSquare, Square, Slash, ArrowLeft, ChevronDown } from 'lucide-react';
 import { useIsMobile } from '../hooks/useIsMobile';
 import { getChat, getMessages, getPending, respondToChat, getSessionStatus, uploadImages, getSlashCommands, type Chat as ChatType, type ParsedMessage, type SessionStatus } from '../api';
 import MessageBubble from '../components/MessageBubble';
@@ -30,8 +30,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [slashCommands, setSlashCommands] = useState<string[]>([]);
   const [showSlashCommandsModal, setShowSlashCommandsModal] = useState(false);
   const [promptInputSetValue, setPromptInputSetValue] = useState<((value: string) => void) | null>(null);
+  const [showScrollToBottom, setShowScrollToBottom] = useState(false);
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const chatContainerRef = useRef<HTMLDivElement>(null);
   const hasReceivedFirstResponseRef = useRef<boolean>(false);
 
   // Shared SSE reader that processes notifications and refetches chat data
@@ -187,9 +189,36 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     loadSlashCommands();
   }, [id, checkSessionStatus, loadSlashCommands]);
 
+  // Handle scroll detection for scroll-to-bottom button
+  const handleScroll = useCallback(() => {
+    if (!chatContainerRef.current) return;
+
+    const container = chatContainerRef.current;
+    const scrollTop = container.scrollTop;
+    const scrollHeight = container.scrollHeight;
+    const clientHeight = container.clientHeight;
+
+    // Show scroll-to-bottom button if not at bottom (with small tolerance)
+    const isAtBottom = scrollTop + clientHeight >= scrollHeight - 50;
+    setShowScrollToBottom(!isAtBottom);
+  }, []);
+
+  useEffect(() => {
+    const container = chatContainerRef.current;
+    if (!container) return;
+
+    container.addEventListener('scroll', handleScroll);
+    return () => container.removeEventListener('scroll', handleScroll);
+  }, [handleScroll]);
+
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [messages.length, inFlightMessage]);
+
+  const scrollToBottom = useCallback(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    setShowScrollToBottom(false);
+  }, []);
 
   const handleSend = useCallback(async (prompt: string, images?: File[]) => {
     // Handle image upload first if images are provided
@@ -480,7 +509,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         )}
       </header>
 
-      <div style={{ flex: 1, overflow: 'auto', padding: '12px 16px' }}>
+      <div ref={chatContainerRef} style={{ flex: 1, overflow: 'auto', padding: '12px 16px', position: 'relative' }}>
         {messages.length === 0 && !streaming && (
           <p style={{ color: 'var(--text-muted)', textAlign: 'center', marginTop: 40 }}>
             Send a message to start coding.
@@ -560,6 +589,40 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           </div>
         )}
         <div ref={bottomRef} />
+
+        {/* Scroll to bottom button */}
+        {showScrollToBottom && (
+          <button
+            onClick={scrollToBottom}
+            style={{
+              position: 'absolute',
+              bottom: '20px',
+              right: '20px',
+              background: 'var(--accent)',
+              color: '#fff',
+              border: 'none',
+              borderRadius: '50%',
+              width: '40px',
+              height: '40px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              zIndex: 10,
+              transition: 'all 0.2s ease',
+            }}
+            onMouseEnter={(e) => {
+              e.currentTarget.style.transform = 'scale(1.1)';
+            }}
+            onMouseLeave={(e) => {
+              e.currentTarget.style.transform = 'scale(1)';
+            }}
+            title="Scroll to bottom"
+          >
+            <ChevronDown size={20} />
+          </button>
+        )}
       </div>
 
       {pendingAction ? (
