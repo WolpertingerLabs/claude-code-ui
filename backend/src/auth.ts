@@ -2,7 +2,15 @@ import { randomBytes } from 'crypto';
 import type { Request, Response, NextFunction } from 'express';
 import { getSession, createSession, deleteSession, cleanupExpiredSessions } from './services/sessions.js';
 
-const PASSWORD = process.env.AUTH_PASSWORD || 'oingoboingobongobongo';
+// Read password lazily so dotenv.config() in index.ts has time to load .env first
+// (ES module imports are hoisted and run before dotenv.config)
+function getPassword(): string {
+  const pw = process.env.AUTH_PASSWORD;
+  if (!pw) {
+    throw new Error('AUTH_PASSWORD environment variable is not set. Please set it in your .env file.');
+  }
+  return pw;
+}
 const SESSION_TTL_MS = 7 * 24 * 60 * 60 * 1000; // 7 days
 
 // Rate limiting: track attempts per IP
@@ -36,7 +44,7 @@ export function loginHandler(req: Request, res: Response) {
   }
 
   const { password } = req.body;
-  if (password !== PASSWORD) {
+  if (password !== getPassword()) {
     return res.status(401).json({ error: 'Invalid password' });
   }
 
