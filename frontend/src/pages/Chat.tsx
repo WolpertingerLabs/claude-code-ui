@@ -805,11 +805,11 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           <button
             onClick={() => setViewMode(viewMode === "chat" ? "diff" : "chat")}
             style={{
-              background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
-              color: viewMode === "diff" ? "#fff" : "var(--text)",
+              background: "var(--bg-secondary, var(--surface))",
+              color: "var(--text)",
               padding: "8px",
               borderRadius: 6,
-              border: viewMode === "diff" ? "none" : "1px solid var(--border)",
+              border: "1px solid var(--border)",
               cursor: "pointer",
               display: "flex",
               alignItems: "center",
