@@ -40,9 +40,13 @@ description: Run the full build, lint, format, commit, push, and redeploy pipeli
    git push
    ```
 
-6. **Redeploy production**:
+6. **Redeploy production** (run detached so it survives if the server process dies mid-redeploy):
    ```
-   npm run redeploy:prod
+   nohup npm run redeploy:prod > /tmp/claude-code-ui-redeploy.log 2>&1 &
+   ```
+   Wait 3 seconds, then confirm PM2 restarted:
+   ```
+   sleep 3 && pm2 list && echo "--- Redeploy log ---" && cat /tmp/claude-code-ui-redeploy.log
    ```
 
 ## Important
