@@ -1,0 +1,13 @@
+artifacts
+build
+cache
+coverage
+package-lock.json
+
+**/.env*
+**/.git
+**/.next
+**/.svn
+**/.hg
+**/keys
+**/node_modules
