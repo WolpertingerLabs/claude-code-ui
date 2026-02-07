@@ -1,5 +1,5 @@
 import { Router } from "express";
-import { getGitBranches, getGitWorktrees, removeWorktree, validateFolderPath } from "../utils/git.js";
+import { getGitBranches, getGitDiff, getGitWorktrees, removeWorktree, validateFolderPath } from "../utils/git.js";
 
 export const gitRouter = Router();
 
@@ -101,5 +101,33 @@ gitRouter.delete("/worktrees", (req, res) => {
     res.json({ ok: true, removed: worktreePath });
   } catch (err: any) {
     res.status(500).json({ error: "Failed to remove worktree", details: err.message });
+  }
+});
+
+/**
+ * Get the git diff (unstaged + staged) for a repository.
+ */
+gitRouter.get("/diff", (req, res) => {
+  // #swagger.tags = ['Git']
+  // #swagger.summary = 'Get git diff'
+  // #swagger.description = 'Returns the combined unstaged and staged diff for a git repository.'
+  /* #swagger.parameters['folder'] = { in: 'query', required: true, type: 'string', description: 'Absolute path to the git repository' } */
+  /* #swagger.responses[200] = { description: "Diff string" } */
+  /* #swagger.responses[400] = { description: "Missing or invalid folder" } */
+  const rawFolder = req.query.folder as string;
+  if (!rawFolder) return res.status(400).json({ error: "folder query param is required" });
+
+  let folder: string;
+  try {
+    folder = validateFolderPath(rawFolder);
+  } catch (err: any) {
+    return res.status(400).json({ error: err.message });
+  }
+
+  try {
+    const diff = getGitDiff(folder);
+    res.json({ diff });
+  } catch (err: any) {
+    res.status(500).json({ error: "Failed to get diff", details: err.message });
   }
 });

@@ -1,26 +1,44 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import { useParams, useNavigate, useSearchParams, useLocation } from 'react-router-dom';
-import { RotateCw, CheckSquare, Square, Slash, ArrowLeft, ChevronDown, ArrowDown } from 'lucide-react';
-import { useIsMobile } from '../hooks/useIsMobile';
-import { getChat, getMessages, getPending, respondToChat, getSessionStatus, uploadImages, getSlashCommands, getSlashCommandsAndPlugins, getNewChatInfo, type Chat as ChatType, type ParsedMessage, type SessionStatus, type Plugin, type NewChatInfo, type DefaultPermissions, type BranchConfig } from '../api';
-import MessageBubble, { TEAM_COLORS } from '../components/MessageBubble';
-import ToolCallBubble from '../components/ToolCallBubble';
-import PromptInput from '../components/PromptInput';
-import FeedbackPanel, { type PendingAction } from '../components/FeedbackPanel';
-import DraftModal from '../components/DraftModal';
-import SlashCommandsModal from '../components/SlashCommandsModal';
-import BranchSelector from '../components/BranchSelector';
-import { addRecentDirectory } from '../utils/localStorage';
+import { useState, useEffect, useRef, useCallback, useMemo } from "react";
+import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
+import { RotateCw, CheckSquare, Square, Slash, ArrowLeft, ChevronDown, ArrowDown, MessageSquare, GitBranch } from "lucide-react";
+import { useIsMobile } from "../hooks/useIsMobile";
+import {
+  getChat,
+  getMessages,
+  getPending,
+  respondToChat,
+  getSessionStatus,
+  uploadImages,
+  getSlashCommands,
+  getSlashCommandsAndPlugins,
+  getNewChatInfo,
+  type Chat as ChatType,
+  type ParsedMessage,
+  type SessionStatus,
+  type Plugin,
+  type NewChatInfo,
+  type DefaultPermissions,
+  type BranchConfig,
+} from "../api";
+import MessageBubble, { TEAM_COLORS } from "../components/MessageBubble";
+import ToolCallBubble from "../components/ToolCallBubble";
+import PromptInput from "../components/PromptInput";
+import FeedbackPanel, { type PendingAction } from "../components/FeedbackPanel";
+import DraftModal from "../components/DraftModal";
+import SlashCommandsModal from "../components/SlashCommandsModal";
+import BranchSelector from "../components/BranchSelector";
+import GitDiffView from "../components/GitDiffView";
+import { addRecentDirectory } from "../utils/localStorage";
 
 interface ToolGroup {
-  kind: 'tool_group';
+  kind: "tool_group";
   toolUse: ParsedMessage;
   toolResult: ParsedMessage | null;
   originalIndices: [number, number | null];
 }
 
 interface SingleMessage {
-  kind: 'single';
+  kind: "single";
   message: ParsedMessage;
   originalIndex: number;
 }
@@ -39,7 +57,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const isMobile = useIsMobile();
 
   // Mode detection: no id means we're on /chat/new (new chat mode)
-  const folder = searchParams.get('folder') || '';
+  const folder = searchParams.get("folder") || "";
   const defaultPermissions = (location.state as any)?.defaultPermissions as DefaultPermissions | undefined;
 
   const [chat, setChat] = useState<ChatType | null>(null);
@@ -50,7 +68,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [sessionStatus, setSessionStatus] = useState<SessionStatus | null>(null);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
-  const [draftMessage, setDraftMessage] = useState('');
+  const [draftMessage, setDraftMessage] = useState("");
   const [inFlightMessage, setInFlightMessage] = useState<string | null>(null);
   const [slashCommands, setSlashCommands] = useState<string[]>([]);
   const [plugins, setPlugins] = useState<Plugin[]>([]);
@@ -59,6 +77,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [promptInputSetValue, setPromptInputSetValue] = useState<((value: string) => void) | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [branchConfig, setBranchConfig] = useState<BranchConfig>({});
+  const [viewMode, setViewMode] = useState<"chat" | "diff">("chat");
   const abortRef = useRef<AbortController | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const chatContainerRef = useRef<HTMLDivElement>(null);
@@ -90,11 +109,11 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       if (consumedIndices.has(i)) continue;
       const msg = messages[i];
 
-      if (msg.type === 'tool_use') {
+      if (msg.type === "tool_use") {
         // Look for a matching tool_result
         let matchedResultIndex: number | null = null;
 
-        if (i + 1 < messages.length && messages[i + 1].type === 'tool_result') {
+        if (i + 1 < messages.length && messages[i + 1].type === "tool_result") {
           // If both have toolUseId, verify the match
           if (msg.toolUseId && messages[i + 1].toolUseId) {
             if (messages[i + 1].toolUseId === msg.toolUseId) {
@@ -109,7 +128,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         // If not adjacent, scan forward with toolUseId matching
         if (matchedResultIndex === null && msg.toolUseId) {
           for (let j = i + 1; j < messages.length && j < i + 10; j++) {
-            if (messages[j].type === 'tool_result' && messages[j].toolUseId === msg.toolUseId && !consumedIndices.has(j)) {
+            if (messages[j].type === "tool_result" && messages[j].toolUseId === msg.toolUseId && !consumedIndices.has(j)) {
               matchedResultIndex = j;
               break;
             }
@@ -121,16 +140,16 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         }
 
         items.push({
-          kind: 'tool_group',
+          kind: "tool_group",
           toolUse: msg,
           toolResult: matchedResultIndex !== null ? messages[matchedResultIndex] : null,
           originalIndices: [i, matchedResultIndex],
         });
-      } else if (msg.type === 'tool_result') {
+      } else if (msg.type === "tool_result") {
         // Orphaned tool_result (its tool_use was not found or already consumed)
-        items.push({ kind: 'single', message: msg, originalIndex: i });
+        items.push({ kind: "single", message: msg, originalIndex: i });
       } else {
-        items.push({ kind: 'single', message: msg, originalIndex: i });
+        items.push({ kind: "single", message: msg, originalIndex: i });
       }
     }
 
@@ -144,145 +163,148 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   onChatListRefreshRef.current = onChatListRefresh;
 
   // Shared SSE reader that processes notifications and refetches chat data
-  const readSSE = useCallback(async (body: ReadableStream<Uint8Array>) => {
-    const reader = body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = '';
-    // Capture the chat ID this stream was created for
-    const streamChatId = id;
+  const readSSE = useCallback(
+    async (body: ReadableStream<Uint8Array>) => {
+      const reader = body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = "";
+      // Capture the chat ID this stream was created for
+      const streamChatId = id;
 
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
 
-        // If the user navigated to a different chat, stop processing this stream
-        if (currentIdRef.current !== streamChatId) {
-          reader.cancel();
-          return;
-        }
+          // If the user navigated to a different chat, stop processing this stream
+          if (currentIdRef.current !== streamChatId) {
+            reader.cancel();
+            return;
+          }
 
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split('\n');
-        buffer = lines.pop() || '';
+          buffer += decoder.decode(value, { stream: true });
+          const lines = buffer.split("\n");
+          buffer = lines.pop() || "";
 
-        for (const line of lines) {
-          if (!line.startsWith('data: ')) continue;
-          try {
-            const event = JSON.parse(line.slice(6));
+          for (const line of lines) {
+            if (!line.startsWith("data: ")) continue;
+            try {
+              const event = JSON.parse(line.slice(6));
 
-            // Handle chat_created - fires during new chat creation
-            if (event.type === 'chat_created' && event.chatId) {
-              tempChatIdRef.current = event.chatId;
-              // Navigate to the real chat URL
-              navigateRef.current(`/chat/${event.chatId}`, { replace: true });
-              // Refresh chat list to show the new chat
-              onChatListRefreshRef.current?.();
-              // Cancel this stream - Chat will re-render with id param
-              // and auto-connect via checkSessionStatus()
-              reader.cancel();
-              return;
-            }
-
-            if (event.type === 'message_complete') {
-              if (currentIdRef.current !== streamChatId) return;
-
-              // Check if the conversation ended right after a plan approval.
-              // The SDK may end the conversation turn after ExitPlanMode is processed,
-              // requiring a follow-up message to start the implementation phase.
-              if (planApprovedRef.current) {
-                planApprovedRef.current = false;
-                // Refetch messages first, then auto-continue
-                getChat(streamChatId!).then(chatData => {
-                  if (currentIdRef.current !== streamChatId) return;
-                  setChat(chatData);
-                });
-                getMessages(streamChatId!).then(msgs => {
-                  if (currentIdRef.current !== streamChatId) return;
-                  setMessages(Array.isArray(msgs) ? msgs : []);
-                });
-                // Send a continuation message to start the implementation
-                // This mirrors how the CLI handles plan approval - it auto-continues
-                handleSendRef.current('Proceed with the plan.');
+              // Handle chat_created - fires during new chat creation
+              if (event.type === "chat_created" && event.chatId) {
+                tempChatIdRef.current = event.chatId;
+                // Navigate to the real chat URL
+                navigateRef.current(`/chat/${event.chatId}`, { replace: true });
+                // Refresh chat list to show the new chat
+                onChatListRefreshRef.current?.();
+                // Cancel this stream - Chat will re-render with id param
+                // and auto-connect via checkSessionStatus()
+                reader.cancel();
                 return;
               }
 
-              setStreaming(false);
-              setInFlightMessage(null);
-              // Refetch complete chat data and messages
-              getChat(streamChatId!).then(chatData => {
+              if (event.type === "message_complete") {
                 if (currentIdRef.current !== streamChatId) return;
-                setChat(chatData);
-              });
-              getMessages(streamChatId!).then(msgs => {
-                if (currentIdRef.current !== streamChatId) return;
-                setMessages(Array.isArray(msgs) ? msgs : []);
-              });
-              // Refresh slash commands in case they were discovered during initialization
-              loadSlashCommands();
-              return;
-            }
 
-            if (event.type === 'message_error') {
-              if (currentIdRef.current !== streamChatId) return;
-              planApprovedRef.current = false;
-              setStreaming(false);
-              setInFlightMessage(null);
-              // Refetch messages to show any partial content, then add error
-              getMessages(streamChatId!).then(msgs => {
-                if (currentIdRef.current !== streamChatId) return;
-                const msgArray = Array.isArray(msgs) ? msgs : [];
-                setMessages([...msgArray, { role: 'assistant', type: 'text', content: `Error: ${event.content}` }]);
-              });
-              return;
-            }
+                // Check if the conversation ended right after a plan approval.
+                // The SDK may end the conversation turn after ExitPlanMode is processed,
+                // requiring a follow-up message to start the implementation phase.
+                if (planApprovedRef.current) {
+                  planApprovedRef.current = false;
+                  // Refetch messages first, then auto-continue
+                  getChat(streamChatId!).then((chatData) => {
+                    if (currentIdRef.current !== streamChatId) return;
+                    setChat(chatData);
+                  });
+                  getMessages(streamChatId!).then((msgs) => {
+                    if (currentIdRef.current !== streamChatId) return;
+                    setMessages(Array.isArray(msgs) ? msgs : []);
+                  });
+                  // Send a continuation message to start the implementation
+                  // This mirrors how the CLI handles plan approval - it auto-continues
+                  handleSendRef.current("Proceed with the plan.");
+                  return;
+                }
 
-            if (event.type === 'message_update') {
-              if (currentIdRef.current !== streamChatId) return;
-              // If we get message_update events after plan approval, it means
-              // the SDK continued on its own — clear the auto-continue flag
-              if (planApprovedRef.current) {
+                setStreaming(false);
+                setInFlightMessage(null);
+                // Refetch complete chat data and messages
+                getChat(streamChatId!).then((chatData) => {
+                  if (currentIdRef.current !== streamChatId) return;
+                  setChat(chatData);
+                });
+                getMessages(streamChatId!).then((msgs) => {
+                  if (currentIdRef.current !== streamChatId) return;
+                  setMessages(Array.isArray(msgs) ? msgs : []);
+                });
+                // Refresh slash commands in case they were discovered during initialization
+                loadSlashCommands();
+                return;
+              }
+
+              if (event.type === "message_error") {
+                if (currentIdRef.current !== streamChatId) return;
                 planApprovedRef.current = false;
+                setStreaming(false);
+                setInFlightMessage(null);
+                // Refetch messages to show any partial content, then add error
+                getMessages(streamChatId!).then((msgs) => {
+                  if (currentIdRef.current !== streamChatId) return;
+                  const msgArray = Array.isArray(msgs) ? msgs : [];
+                  setMessages([...msgArray, { role: "assistant", type: "text", content: `Error: ${event.content}` }]);
+                });
+                return;
               }
-              // Clear in-flight message once we get the first response
-              setInFlightMessage(null);
-              // New content is available - refetch all messages to show latest state with timestamps
-              getMessages(streamChatId!).then(msgs => {
+
+              if (event.type === "message_update") {
                 if (currentIdRef.current !== streamChatId) return;
-                setMessages(Array.isArray(msgs) ? msgs : []);
-              });
+                // If we get message_update events after plan approval, it means
+                // the SDK continued on its own — clear the auto-continue flag
+                if (planApprovedRef.current) {
+                  planApprovedRef.current = false;
+                }
+                // Clear in-flight message once we get the first response
+                setInFlightMessage(null);
+                // New content is available - refetch all messages to show latest state with timestamps
+                getMessages(streamChatId!).then((msgs) => {
+                  if (currentIdRef.current !== streamChatId) return;
+                  setMessages(Array.isArray(msgs) ? msgs : []);
+                });
 
-              // Check if this is the first response and we should refresh chat list
-              if (!hasReceivedFirstResponseRef.current && onChatListRefresh) {
-                hasReceivedFirstResponseRef.current = true;
-                onChatListRefresh();
+                // Check if this is the first response and we should refresh chat list
+                if (!hasReceivedFirstResponseRef.current && onChatListRefresh) {
+                  hasReceivedFirstResponseRef.current = true;
+                  onChatListRefresh();
+                }
+                continue;
               }
-              continue;
-            }
 
-            if (event.type === 'permission_request' || event.type === 'user_question' || event.type === 'plan_review') {
-              if (currentIdRef.current !== streamChatId) return;
-              setPendingAction({
-                type: event.type,
-                toolName: event.toolName,
-                input: event.input,
-                questions: event.questions,
-                suggestions: event.suggestions,
-                content: event.content,
-              });
-              continue;
-            }
-          } catch {}
+              if (event.type === "permission_request" || event.type === "user_question" || event.type === "plan_review") {
+                if (currentIdRef.current !== streamChatId) return;
+                setPendingAction({
+                  type: event.type,
+                  toolName: event.toolName,
+                  input: event.input,
+                  questions: event.questions,
+                  suggestions: event.suggestions,
+                  content: event.content,
+                });
+                continue;
+              }
+            } catch {}
+          }
+        }
+      } finally {
+        // Only update state if still on the same chat
+        if (currentIdRef.current === streamChatId) {
+          setStreaming(false);
+          setInFlightMessage(null);
         }
       }
-    } finally {
-      // Only update state if still on the same chat
-      if (currentIdRef.current === streamChatId) {
-        setStreaming(false);
-        setInFlightMessage(null);
-      }
-    }
-  }, [id]);
+    },
+    [id],
+  );
 
   // Connect to an existing SSE stream (e.g. after page refresh)
   const connectToStream = useCallback(async () => {
@@ -295,7 +317,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     abortRef.current = controller;
     try {
       const res = await fetch(`/api/chats/${id}/stream`, {
-        credentials: 'include',
+        credentials: "include",
         signal: controller.signal,
       });
       if (!res.ok || !res.body) {
@@ -304,8 +326,8 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       }
       await readSSE(res.body);
     } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        setNetworkError('network error');
+      if (err.name !== "AbortError") {
+        setNetworkError("network error");
         setStreaming(false);
       }
     } finally {
@@ -324,13 +346,13 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       setSessionStatus(status);
 
       // Auto-connect if session is active (web or CLI)
-      if (status.active && (status.type === 'web' || status.type === 'cli')) {
+      if (status.active && (status.type === "web" || status.type === "cli")) {
         setNetworkError(null); // Clear any previous network errors
         setStreaming(true);
         connectToStream();
       }
     } catch (error) {
-      console.warn('Failed to check session status:', error);
+      console.warn("Failed to check session status:", error);
     }
   }, [id, connectToStream]);
 
@@ -342,7 +364,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       setSlashCommands(slashCommands);
       setPlugins(plugins);
     } catch (error) {
-      console.warn('Failed to load slash commands and plugins:', error);
+      console.warn("Failed to load slash commands and plugins:", error);
     }
   }, [id]);
 
@@ -370,19 +392,17 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     }
 
     getNewChatInfo(folder)
-      .then(data => {
+      .then((data) => {
         setInfo(data);
         if (data.slash_commands) {
-          setSlashCommands(data.slash_commands.map((cmd: any) =>
-            typeof cmd === 'string' ? cmd : cmd.name
-          ));
+          setSlashCommands(data.slash_commands.map((cmd: any) => (typeof cmd === "string" ? cmd : cmd.name)));
         }
         if (data.plugins) {
           setPlugins(data.plugins);
         }
       })
-      .catch(err => {
-        setNetworkError(err.message || 'Failed to load folder info');
+      .catch((err) => {
+        setNetworkError(err.message || "Failed to load folder info");
       });
   }, [folder, id]);
 
@@ -407,15 +427,13 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     planApprovedRef.current = false;
     tempChatIdRef.current = null;
 
-    getChat(id!).then(chatData => {
+    getChat(id!).then((chatData) => {
       // Guard: only apply if still on this chat
       if (currentIdRef.current !== id) return;
       setChat(chatData);
       // Use slash commands and plugins from chat data if available for faster display
       if (chatData?.slash_commands && chatData.slash_commands.length > 0) {
-        setSlashCommands(chatData.slash_commands.map((cmd: any) =>
-          typeof cmd === 'string' ? cmd : cmd.name
-        ));
+        setSlashCommands(chatData.slash_commands.map((cmd: any) => (typeof cmd === "string" ? cmd : cmd.name)));
       }
       if (chatData?.plugins && chatData.plugins.length > 0) {
         setPlugins(chatData.plugins);
@@ -426,11 +444,11 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         loadSlashCommands();
       }
     });
-    getMessages(id!).then(msgs => {
+    getMessages(id!).then((msgs) => {
       if (currentIdRef.current !== id) return;
       setMessages(Array.isArray(msgs) ? msgs : []);
     });
-    getPending(id!).then(p => {
+    getPending(id!).then((p) => {
       if (currentIdRef.current !== id) return;
       if (p) {
         setPendingAction(p);
@@ -450,19 +468,18 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     };
   }, [id, checkSessionStatus, loadSlashCommands]);
 
-
   useEffect(() => {
     // Only auto-scroll if auto-scroll is enabled
     if (!autoScroll) return;
 
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [messages.length, inFlightMessage, autoScroll]);
 
   // Load active plugins from localStorage and listen for changes
   useEffect(() => {
     const loadActivePlugins = () => {
       try {
-        const active = localStorage.getItem('activePlugins');
+        const active = localStorage.getItem("activePlugins");
         setActivePluginIds(active ? JSON.parse(active) : []);
       } catch {
         setActivePluginIds([]);
@@ -473,156 +490,162 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
     // Listen for storage changes (when SlashCommandsModal updates activePlugins)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === 'activePlugins') {
+      if (e.key === "activePlugins") {
         loadActivePlugins();
       }
     };
 
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
 
   const toggleAutoScroll = useCallback(() => {
-    setAutoScroll(prev => {
+    setAutoScroll((prev) => {
       const newAutoScroll = !prev;
       // If turning auto-scroll on, immediately scroll to bottom
       if (newAutoScroll) {
-        bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+        bottomRef.current?.scrollIntoView({ behavior: "smooth" });
       }
       return newAutoScroll;
     });
   }, []);
 
-  const handleSend = useCallback(async (prompt: string, images?: File[]) => {
-    // Set in-flight message to show user's message immediately
-    setInFlightMessage(prompt);
-    setNetworkError(null); // Clear any previous network errors
+  const handleSend = useCallback(
+    async (prompt: string, images?: File[]) => {
+      // Set in-flight message to show user's message immediately
+      setInFlightMessage(prompt);
+      setNetworkError(null); // Clear any previous network errors
 
-    // If there's already a streaming connection, stop it first
-    if (abortRef.current) {
-      abortRef.current.abort();
-      abortRef.current = null;
-    }
-
-    setStreaming(true);
-    const controller = new AbortController();
-    abortRef.current = controller;
-
-    try {
-      let res: Response;
-
-      if (!id) {
-        // NEW CHAT MODE: POST to /api/chats/new/message
-        addRecentDirectory(folder);
-
-        const requestBody: any = { folder, prompt, defaultPermissions };
-        if (activePluginIds.length > 0) {
-          requestBody.activePlugins = activePluginIds;
-        }
-        if (branchConfig.baseBranch || branchConfig.newBranch || branchConfig.useWorktree) {
-          requestBody.branchConfig = branchConfig;
-        }
-
-        res = await fetch('/api/chats/new/message', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(requestBody),
-          signal: controller.signal,
-        });
-      } else {
-        // EXISTING CHAT MODE: POST to /api/chats/:id/message
-        // Handle image upload first if images are provided
-        let imageIds: string[] = [];
-        if (images && images.length > 0) {
-          try {
-            const uploadResult = await uploadImages(id, images);
-            if (uploadResult.success) {
-              imageIds = uploadResult.images.map(img => img.id);
-            } else {
-              console.error('Image upload failed:', uploadResult.errors);
-            }
-          } catch (error) {
-            console.error('Image upload error:', error);
-          }
-        }
-
-        if (chat?.folder) {
-          addRecentDirectory(chat.folder);
-        }
-
-        const body: any = { prompt };
-        if (imageIds.length > 0) {
-          body.imageIds = imageIds;
-        }
-        if (activePluginIds.length > 0) {
-          body.activePlugins = activePluginIds;
-        }
-
-        res = await fetch(`/api/chats/${id}/message`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          credentials: 'include',
-          body: JSON.stringify(body),
-          signal: controller.signal,
-        });
-      }
-
-      if (!res.ok || !res.body) {
-        const errorData = await res.json().catch(() => ({}));
-        setNetworkError(errorData.error || 'Failed to send message');
-        setStreaming(false);
-        setInFlightMessage(null);
-        return;
-      }
-
-      await readSSE(res.body);
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        setNetworkError('network error');
-        setStreaming(false);
-        setInFlightMessage(null); // Clear in-flight message on error
-      }
-    } finally {
-      // Only stop streaming if this is still the current request
-      if (abortRef.current === controller) {
-        setStreaming(false);
-        setInFlightMessage(null); // Clear in-flight message when done
+      // If there's already a streaming connection, stop it first
+      if (abortRef.current) {
+        abortRef.current.abort();
         abortRef.current = null;
       }
-    }
-  }, [id, folder, defaultPermissions, readSSE, activePluginIds, chat, branchConfig]);
+
+      setStreaming(true);
+      const controller = new AbortController();
+      abortRef.current = controller;
+
+      try {
+        let res: Response;
+
+        if (!id) {
+          // NEW CHAT MODE: POST to /api/chats/new/message
+          addRecentDirectory(folder);
+
+          const requestBody: any = { folder, prompt, defaultPermissions };
+          if (activePluginIds.length > 0) {
+            requestBody.activePlugins = activePluginIds;
+          }
+          if (branchConfig.baseBranch || branchConfig.newBranch || branchConfig.useWorktree) {
+            requestBody.branchConfig = branchConfig;
+          }
+
+          res = await fetch("/api/chats/new/message", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(requestBody),
+            signal: controller.signal,
+          });
+        } else {
+          // EXISTING CHAT MODE: POST to /api/chats/:id/message
+          // Handle image upload first if images are provided
+          let imageIds: string[] = [];
+          if (images && images.length > 0) {
+            try {
+              const uploadResult = await uploadImages(id, images);
+              if (uploadResult.success) {
+                imageIds = uploadResult.images.map((img) => img.id);
+              } else {
+                console.error("Image upload failed:", uploadResult.errors);
+              }
+            } catch (error) {
+              console.error("Image upload error:", error);
+            }
+          }
+
+          if (chat?.folder) {
+            addRecentDirectory(chat.folder);
+          }
+
+          const body: any = { prompt };
+          if (imageIds.length > 0) {
+            body.imageIds = imageIds;
+          }
+          if (activePluginIds.length > 0) {
+            body.activePlugins = activePluginIds;
+          }
+
+          res = await fetch(`/api/chats/${id}/message`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            credentials: "include",
+            body: JSON.stringify(body),
+            signal: controller.signal,
+          });
+        }
+
+        if (!res.ok || !res.body) {
+          const errorData = await res.json().catch(() => ({}));
+          setNetworkError(errorData.error || "Failed to send message");
+          setStreaming(false);
+          setInFlightMessage(null);
+          return;
+        }
+
+        await readSSE(res.body);
+      } catch (err: any) {
+        if (err.name !== "AbortError") {
+          setNetworkError("network error");
+          setStreaming(false);
+          setInFlightMessage(null); // Clear in-flight message on error
+        }
+      } finally {
+        // Only stop streaming if this is still the current request
+        if (abortRef.current === controller) {
+          setStreaming(false);
+          setInFlightMessage(null); // Clear in-flight message when done
+          abortRef.current = null;
+        }
+      }
+    },
+    [id, folder, defaultPermissions, readSSE, activePluginIds, chat, branchConfig],
+  );
 
   // Keep ref in sync so readSSE can call handleSend without stale closure
   handleSendRef.current = handleSend;
 
-  const handleRespond = useCallback(async (allow: boolean, updatedInput?: Record<string, unknown>) => {
-    const wasReconnect = !abortRef.current; // no active SSE = page was refreshed
-    setPendingAction(null);
+  const handleRespond = useCallback(
+    async (allow: boolean, updatedInput?: Record<string, unknown>) => {
+      const wasReconnect = !abortRef.current; // no active SSE = page was refreshed
+      setPendingAction(null);
 
-    // Use id if available, fall back to tempChatIdRef for new chat mode
-    const chatId = id || tempChatIdRef.current;
-    if (!chatId) return;
+      // Use id if available, fall back to tempChatIdRef for new chat mode
+      const chatId = id || tempChatIdRef.current;
+      if (!chatId) return;
 
-    const result = await respondToChat(chatId, allow, updatedInput);
+      const result = await respondToChat(chatId, allow, updatedInput);
 
-    // Track if this was an ExitPlanMode approval - the SDK conversation may end
-    // after plan approval, so we need to auto-send a continuation message
-    if (result.toolName === 'ExitPlanMode' && allow) {
-      planApprovedRef.current = true;
-    }
+      // Track if this was an ExitPlanMode approval - the SDK conversation may end
+      // after plan approval, so we need to auto-send a continuation message
+      if (result.toolName === "ExitPlanMode" && allow) {
+        planApprovedRef.current = true;
+      }
 
-    // If we got here via page refresh (no active stream), reconnect to the SSE stream
-    if (wasReconnect && id) {
-      setStreaming(true);
-      connectToStream();
-    }
-  }, [id, connectToStream]);
+      // If we got here via page refresh (no active stream), reconnect to the SSE stream
+      if (wasReconnect && id) {
+        setStreaming(true);
+        connectToStream();
+      }
+    },
+    [id, connectToStream],
+  );
 
   const handleStop = useCallback(() => {
     abortRef.current?.abort();
     if (id) {
-      fetch(`/api/chats/${id}/stop`, { method: 'POST', credentials: 'include' });
+      fetch(`/api/chats/${id}/stop`, { method: "POST", credentials: "include" });
     }
     setStreaming(false);
     setInFlightMessage(null); // Clear in-flight message when stopping
@@ -633,8 +656,8 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     setNetworkError(null);
     // Refetch chat data and messages to capture any missing content
     getChat(id!).then(setChat);
-    getMessages(id!).then(msgs => setMessages(Array.isArray(msgs) ? msgs : []));
-    getPending(id!).then(p => {
+    getMessages(id!).then((msgs) => setMessages(Array.isArray(msgs) ? msgs : []));
+    getPending(id!).then((p) => {
       if (p) {
         setPendingAction(p);
         setStreaming(true);
@@ -645,17 +668,14 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
   // Check if there are any TodoWrite tool calls in the conversation
   const hasTodoList = useMemo(() => {
-    return messages.some(message =>
-      message.type === 'tool_use' &&
-      message.toolName === 'TodoWrite'
-    );
+    return messages.some((message) => message.type === "tool_use" && message.toolName === "TodoWrite");
   }, [messages]);
 
   const handleTodoListClick = useCallback(() => {
     // Find the latest TodoWrite tool call and its result
     let latestTodoIndex = -1;
     for (let i = messages.length - 1; i >= 0; i--) {
-      if (messages[i].type === 'tool_use' && messages[i].toolName === 'TodoWrite') {
+      if (messages[i].type === "tool_use" && messages[i].toolName === "TodoWrite") {
         latestTodoIndex = i;
         break;
       }
@@ -665,12 +685,12 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       // Scroll to the todo list
       const targetElement = document.querySelector(`[data-message-index="${latestTodoIndex}"]`) as HTMLElement | null;
       if (targetElement) {
-        targetElement.scrollIntoView({ behavior: 'smooth', block: 'center' });
-        targetElement.style.outline = '2px solid var(--accent)';
-        targetElement.style.borderRadius = '8px';
+        targetElement.scrollIntoView({ behavior: "smooth", block: "center" });
+        targetElement.style.outline = "2px solid var(--accent)";
+        targetElement.style.borderRadius = "8px";
         setTimeout(() => {
-          targetElement.style.outline = '';
-          targetElement.style.borderRadius = '';
+          targetElement.style.outline = "";
+          targetElement.style.borderRadius = "";
         }, 2000);
       }
     }
@@ -689,43 +709,48 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
   const [draftSuccessCallback, setDraftSuccessCallback] = useState<(() => void) | null>(null);
 
-  const handleCommandSelect = useCallback((command: string) => {
-    if (promptInputSetValue) {
-      promptInputSetValue(command);
-    }
-  }, [promptInputSetValue]);
+  const handleCommandSelect = useCallback(
+    (command: string) => {
+      if (promptInputSetValue) {
+        promptInputSetValue(command);
+      }
+    },
+    [promptInputSetValue],
+  );
 
   // Early return: no folder specified in new chat mode
   if (!id && !folder) {
     return (
-      <div style={{ height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-        <p style={{ color: 'var(--text-muted)' }}>No folder specified. Please select a folder from the chat list.</p>
+      <div style={{ height: "100%", display: "flex", alignItems: "center", justifyContent: "center" }}>
+        <p style={{ color: "var(--text-muted)" }}>No folder specified. Please select a folder from the chat list.</p>
       </div>
     );
   }
 
   return (
-    <div style={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <header style={{
-        padding: '12px 16px',
-        borderBottom: '1px solid var(--border)',
-        display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        flexShrink: 0,
-      }}>
+    <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
+      <header
+        style={{
+          padding: "12px 16px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexShrink: 0,
+        }}
+      >
         {isMobile && (
           <button
-            onClick={() => navigate('/')}
+            onClick={() => navigate("/")}
             style={{
-              background: 'none',
-              border: 'none',
-              padding: '4px 8px',
-              cursor: 'pointer',
-              color: 'var(--text)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center'
+              background: "none",
+              border: "none",
+              padding: "4px 8px",
+              cursor: "pointer",
+              color: "var(--text)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             title="Back to chat list"
           >
@@ -733,54 +758,83 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           </button>
         )}
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <div style={{ fontSize: 15, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div style={{ fontSize: 15, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               {!id
-                ? (info?.is_git_repo ? (info.git_branch || 'main') : (folder.split('/').pop() || 'New Chat'))
-                : (chat?.is_git_repo ? (chat.git_branch || 'main') : (chat?.folder?.split('/').pop() || 'Chat'))
-              }
+                ? info?.is_git_repo
+                  ? info.git_branch || "main"
+                  : folder.split("/").pop() || "New Chat"
+                : chat?.is_git_repo
+                  ? chat.git_branch || "main"
+                  : chat?.folder?.split("/").pop() || "Chat"}
             </div>
             {!id ? (
-              <div style={{
-                fontSize: 11,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: 'var(--accent)',
-                color: '#fff',
-                fontWeight: 500,
-              }}>
+              <div
+                style={{
+                  fontSize: 11,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: "var(--accent)",
+                  color: "#fff",
+                  fontWeight: 500,
+                }}
+              >
                 New
               </div>
             ) : sessionStatus?.active ? (
-              <div style={{
-                fontSize: 11,
-                padding: '2px 6px',
-                borderRadius: 4,
-                background: sessionStatus.type === 'web' ? 'var(--accent)' : '#10b981',
-                color: '#fff',
-                fontWeight: 500,
-              }}>
-                {sessionStatus.type === 'web' ? '🌐 Active' : '💻 CLI'}
+              <div
+                style={{
+                  fontSize: 11,
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  background: sessionStatus.type === "web" ? "var(--accent)" : "#10b981",
+                  color: "#fff",
+                  fontWeight: 500,
+                }}
+              >
+                {sessionStatus.type === "web" ? "🌐 Active" : "💻 CLI"}
               </div>
             ) : null}
           </div>
-          <div style={{ fontSize: 12, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          <div style={{ fontSize: 12, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
             {!id ? folder : chat?.folder}
           </div>
         </div>
+        {/* Chat / Diff view toggle - only for git repos */}
+        {((!id && info?.is_git_repo) || (id && chat?.is_git_repo)) && (
+          <button
+            onClick={() => setViewMode(viewMode === "chat" ? "diff" : "chat")}
+            style={{
+              background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
+              color: viewMode === "diff" ? "#fff" : "var(--text)",
+              padding: "8px",
+              borderRadius: 6,
+              border: viewMode === "diff" ? "none" : "1px solid var(--border)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              transition: "all 0.15s ease",
+            }}
+            title={viewMode === "chat" ? "Show git diff" : "Back to chat"}
+          >
+            {viewMode === "chat" ? <GitBranch size={16} /> : <MessageSquare size={16} />}
+          </button>
+        )}
+
         {hasTodoList && (
           <button
             onClick={handleTodoListClick}
             style={{
-              background: 'var(--accent)',
-              color: '#fff',
-              padding: '8px',
+              background: "var(--accent)",
+              color: "#fff",
+              padding: "8px",
               borderRadius: 6,
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             title="Jump to latest to-do list"
           >
@@ -793,15 +847,15 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           <button
             onClick={() => setShowSlashCommandsModal(true)}
             style={{
-              background: 'var(--bg-secondary)',
-              color: 'var(--text)',
-              padding: '8px',
+              background: "var(--bg-secondary)",
+              color: "var(--text)",
+              padding: "8px",
               borderRadius: 6,
-              border: '1px solid var(--border)',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             title="View available slash commands"
           >
@@ -813,15 +867,15 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           <button
             onClick={handleReconnect}
             style={{
-              background: 'var(--accent)',
-              color: '#fff',
-              padding: '8px',
+              background: "var(--accent)",
+              color: "#fff",
+              padding: "8px",
               borderRadius: 6,
-              border: 'none',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
+              border: "none",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
             }}
             title="Reconnect to stream"
           >
@@ -832,300 +886,318 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           onClick={handleStop}
           disabled={!streaming}
           style={{
-            background: streaming ? 'var(--danger)' : 'var(--border)',
-            color: streaming ? '#fff' : 'var(--text-secondary)',
-            padding: '8px',
+            background: streaming ? "var(--danger)" : "var(--border)",
+            color: streaming ? "#fff" : "var(--text-secondary)",
+            padding: "8px",
             borderRadius: 6,
-            border: 'none',
-            cursor: streaming ? 'pointer' : 'default',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
+            border: "none",
+            cursor: streaming ? "pointer" : "default",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
             opacity: streaming ? 1 : 0.5,
           }}
-          title={streaming ? 'Stop generation' : 'No active generation'}
+          title={streaming ? "Stop generation" : "No active generation"}
         >
           <Square size={14} />
         </button>
       </header>
 
-      <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
-        <div ref={chatContainerRef} style={{ height: '100%', overflow: 'auto', padding: '12px 16px' }}>
-        {!id ? (
-          /* NEW CHAT MODE: Welcome screen */
-          <>
-            {networkError && (
-              <div style={{
-                color: 'var(--danger)',
-                background: 'var(--danger-bg, rgba(255, 0, 0, 0.1))',
-                padding: '12px 16px',
-                borderRadius: 6,
-                marginBottom: 16,
-              }}>
-                {networkError}
-              </div>
-            )}
+      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+        {viewMode === "diff" ? (
+          <GitDiffView folder={!id ? folder : chat?.folder || folder} />
+        ) : (
+          <div ref={chatContainerRef} style={{ height: "100%", overflow: "auto", padding: "12px 16px" }}>
+            {!id ? (
+              /* NEW CHAT MODE: Welcome screen */
+              <>
+                {networkError && (
+                  <div
+                    style={{
+                      color: "var(--danger)",
+                      background: "var(--danger-bg, rgba(255, 0, 0, 0.1))",
+                      padding: "12px 16px",
+                      borderRadius: 6,
+                      marginBottom: 16,
+                    }}
+                  >
+                    {networkError}
+                  </div>
+                )}
 
-            {!streaming && !networkError && (
-              <div style={{ padding: '40px 20px', maxWidth: 600, margin: '0 auto' }}>
-                {/* Folder info */}
-                <div style={{
-                  background: 'var(--bg-secondary)',
-                  borderRadius: 12,
-                  padding: '20px 24px',
-                  marginBottom: 16,
-                }}>
-                  <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 8 }}>Working Directory</div>
-                  <div style={{ fontSize: 15, fontWeight: 500, wordBreak: 'break-all' }}>{folder}</div>
-                  {info?.is_git_repo && (
-                    <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
-                      <span style={{
-                        background: '#10b981',
-                        color: '#fff',
-                        padding: '3px 8px',
-                        borderRadius: 4,
-                        fontSize: 11,
-                        fontWeight: 500,
-                      }}>Git</span>
-                      <span style={{ fontSize: 13, color: 'var(--text-muted)' }}>
-                        Branch: <strong style={{ color: 'var(--text)' }}>{info.git_branch || 'main'}</strong>
-                      </span>
-                    </div>
-                  )}
-                </div>
-
-                {/* Slash commands if available */}
-                {slashCommands.length > 0 && (
-                  <div style={{
-                    background: 'var(--bg-secondary)',
-                    borderRadius: 12,
-                    padding: '20px 24px',
-                    marginBottom: 16,
-                  }}>
-                    <div style={{ fontSize: 13, color: 'var(--text-muted)', marginBottom: 12 }}>Available Commands</div>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-                      {slashCommands.slice(0, 8).map((cmd, i) => (
-                        <button
-                          key={i}
-                          onClick={() => {
-                            if (promptInputSetValue) {
-                              promptInputSetValue(cmd);
-                            }
-                          }}
-                          style={{
-                            background: 'var(--bg)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 6,
-                            padding: '6px 12px',
-                            fontSize: 13,
-                            color: 'var(--accent)',
-                            cursor: 'pointer',
-                            fontFamily: 'monospace',
-                          }}
-                        >
-                          {cmd}
-                        </button>
-                      ))}
-                      {slashCommands.length > 8 && (
-                        <button
-                          onClick={() => setShowSlashCommandsModal(true)}
-                          style={{
-                            background: 'var(--bg)',
-                            border: '1px solid var(--border)',
-                            borderRadius: 6,
-                            padding: '6px 12px',
-                            fontSize: 13,
-                            color: 'var(--text-muted)',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          +{slashCommands.length - 8} more
-                        </button>
+                {!streaming && !networkError && (
+                  <div style={{ padding: "40px 20px", maxWidth: 600, margin: "0 auto" }}>
+                    {/* Folder info */}
+                    <div
+                      style={{
+                        background: "var(--bg-secondary)",
+                        borderRadius: 12,
+                        padding: "20px 24px",
+                        marginBottom: 16,
+                      }}
+                    >
+                      <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 8 }}>Working Directory</div>
+                      <div style={{ fontSize: 15, fontWeight: 500, wordBreak: "break-all" }}>{folder}</div>
+                      {info?.is_git_repo && (
+                        <div style={{ marginTop: 12, display: "flex", alignItems: "center", gap: 8 }}>
+                          <span
+                            style={{
+                              background: "#10b981",
+                              color: "#fff",
+                              padding: "3px 8px",
+                              borderRadius: 4,
+                              fontSize: 11,
+                              fontWeight: 500,
+                            }}
+                          >
+                            Git
+                          </span>
+                          <span style={{ fontSize: 13, color: "var(--text-muted)" }}>
+                            Branch: <strong style={{ color: "var(--text)" }}>{info.git_branch || "main"}</strong>
+                          </span>
+                        </div>
                       )}
+                    </div>
+
+                    {/* Slash commands if available */}
+                    {slashCommands.length > 0 && (
+                      <div
+                        style={{
+                          background: "var(--bg-secondary)",
+                          borderRadius: 12,
+                          padding: "20px 24px",
+                          marginBottom: 16,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12 }}>Available Commands</div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {slashCommands.slice(0, 8).map((cmd, i) => (
+                            <button
+                              key={i}
+                              onClick={() => {
+                                if (promptInputSetValue) {
+                                  promptInputSetValue(cmd);
+                                }
+                              }}
+                              style={{
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "6px 12px",
+                                fontSize: 13,
+                                color: "var(--accent)",
+                                cursor: "pointer",
+                                fontFamily: "monospace",
+                              }}
+                            >
+                              {cmd}
+                            </button>
+                          ))}
+                          {slashCommands.length > 8 && (
+                            <button
+                              onClick={() => setShowSlashCommandsModal(true)}
+                              style={{
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "6px 12px",
+                                fontSize: 13,
+                                color: "var(--text-muted)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              +{slashCommands.length - 8} more
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Getting started hint */}
+                    <p style={{ color: "var(--text-muted)", textAlign: "center", fontSize: 14 }}>Send a message to start coding with Claude.</p>
+                  </div>
+                )}
+
+                {inFlightMessage && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      margin: "6px 0",
+                    }}
+                  >
+                    <div
+                      style={{
+                        maxWidth: "85%",
+                        padding: "10px 14px",
+                        borderRadius: "var(--radius)",
+                        background: "var(--user-bg)",
+                        border: "1px solid transparent",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        wordBreak: "break-word",
+                        opacity: 0.7,
+                      }}
+                    >
+                      {inFlightMessage}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--text-muted)",
+                        opacity: 0.5,
+                        marginTop: 4,
+                        textAlign: "right",
+                      }}
+                    >
+                      Sending...
                     </div>
                   </div>
                 )}
 
-                {/* Getting started hint */}
-                <p style={{ color: 'var(--text-muted)', textAlign: 'center', fontSize: 14 }}>
-                  Send a message to start coding with Claude.
-                </p>
-              </div>
-            )}
-
-            {inFlightMessage && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                margin: '6px 0',
-              }}>
-                <div style={{
-                  maxWidth: '85%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--user-bg)',
-                  border: '1px solid transparent',
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word',
-                  opacity: 0.7,
-                }}>
-                  {inFlightMessage}
-                </div>
-                <div style={{
-                  fontSize: 10,
-                  color: 'var(--text-muted)',
-                  opacity: 0.5,
-                  marginTop: 4,
-                  textAlign: 'right',
-                }}>
-                  Sending...
-                </div>
-              </div>
-            )}
-
-            {streaming && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '8px 0' }}>
-                Starting chat session...
-              </div>
-            )}
-          </>
-        ) : (
-          /* EXISTING CHAT MODE: Message list */
-          <>
-            {messages.length === 0 && !streaming && (
-              <div style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                height: '100%',
-                color: 'var(--text-muted)',
-                fontSize: 14,
-              }}>
-                No messages in this conversation
-              </div>
-            )}
-            {displayItems.map((item, i) => {
-              if (item.kind === 'tool_group') {
-                return (
-                  <div key={`tool-${item.originalIndices[0]}`} data-message-index={item.originalIndices[0]}>
-                    <ToolCallBubble
-                      toolUse={item.toolUse}
-                      toolResult={item.toolResult}
-                      isRunning={item.toolResult === null && streaming}
-                    />
+                {streaming && <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0" }}>Starting chat session...</div>}
+              </>
+            ) : (
+              /* EXISTING CHAT MODE: Message list */
+              <>
+                {messages.length === 0 && !streaming && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      height: "100%",
+                      color: "var(--text-muted)",
+                      fontSize: 14,
+                    }}
+                  >
+                    No messages in this conversation
                   </div>
-                );
-              }
-              return (
-                <div key={item.originalIndex} data-message-index={item.originalIndex}>
-                  <MessageBubble message={item.message} teamColorMap={teamColorMap} />
-                </div>
-              );
-            })}
-            {inFlightMessage && (
-              <div style={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-end',
-                margin: '6px 0',
-              }}>
-                <div style={{
-                  maxWidth: '85%',
-                  padding: '10px 14px',
-                  borderRadius: 'var(--radius)',
-                  background: 'var(--user-bg)',
-                  border: '1px solid transparent',
-                  fontSize: 14,
-                  lineHeight: 1.5,
-                  wordBreak: 'break-word',
-                  opacity: 0.7,
-                }}>
-                  {inFlightMessage}
-                </div>
-                <div style={{
-                  fontSize: 10,
-                  color: 'var(--text-muted)',
-                  opacity: 0.5,
-                  marginTop: 4,
-                  textAlign: 'right' as const,
-                }}>
-                  Sending...
-                </div>
-              </div>
+                )}
+                {displayItems.map((item, i) => {
+                  if (item.kind === "tool_group") {
+                    return (
+                      <div key={`tool-${item.originalIndices[0]}`} data-message-index={item.originalIndices[0]}>
+                        <ToolCallBubble toolUse={item.toolUse} toolResult={item.toolResult} isRunning={item.toolResult === null && streaming} />
+                      </div>
+                    );
+                  }
+                  return (
+                    <div key={item.originalIndex} data-message-index={item.originalIndex}>
+                      <MessageBubble message={item.message} teamColorMap={teamColorMap} />
+                    </div>
+                  );
+                })}
+                {inFlightMessage && (
+                  <div
+                    style={{
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "flex-end",
+                      margin: "6px 0",
+                    }}
+                  >
+                    <div
+                      style={{
+                        maxWidth: "85%",
+                        padding: "10px 14px",
+                        borderRadius: "var(--radius)",
+                        background: "var(--user-bg)",
+                        border: "1px solid transparent",
+                        fontSize: 14,
+                        lineHeight: 1.5,
+                        wordBreak: "break-word",
+                        opacity: 0.7,
+                      }}
+                    >
+                      {inFlightMessage}
+                    </div>
+                    <div
+                      style={{
+                        fontSize: 10,
+                        color: "var(--text-muted)",
+                        opacity: 0.5,
+                        marginTop: 4,
+                        textAlign: "right" as const,
+                      }}
+                    >
+                      Sending...
+                    </div>
+                  </div>
+                )}
+                {networkError && (
+                  <div
+                    style={{
+                      color: "var(--danger)",
+                      fontSize: 13,
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "var(--danger-bg, rgba(255, 0, 0, 0.1))",
+                      borderRadius: 6,
+                      padding: "12px 16px",
+                      margin: "8px 0",
+                    }}
+                  >
+                    <div>Network error occurred</div>
+                    <button
+                      onClick={handleReconnect}
+                      style={{
+                        background: "var(--accent)",
+                        color: "#fff",
+                        padding: "4px 8px",
+                        borderRadius: 4,
+                        fontSize: 11,
+                        marginLeft: "auto",
+                      }}
+                    >
+                      <RotateCw size={12} style={{ marginRight: 4 }} />
+                      Reconnect
+                    </button>
+                  </div>
+                )}
+                {streaming && (
+                  <div style={{ color: "var(--text-muted)", fontSize: 13, padding: "8px 0", display: "flex", alignItems: "center", gap: 8 }}>
+                    <div>Claude is working...</div>
+                    <div style={{ fontSize: 11, opacity: 0.7 }}>(You can send another message anytime)</div>
+                  </div>
+                )}
+                <div ref={bottomRef} />
+              </>
             )}
-            {networkError && (
-              <div style={{
-                color: 'var(--danger)',
-                fontSize: 13,
-                display: 'flex',
-                alignItems: 'center',
-                gap: 8,
-                background: 'var(--danger-bg, rgba(255, 0, 0, 0.1))',
-                borderRadius: 6,
-                padding: '12px 16px',
-                margin: '8px 0'
-              }}>
-                <div>Network error occurred</div>
-                <button
-                  onClick={handleReconnect}
-                  style={{
-                    background: 'var(--accent)',
-                    color: '#fff',
-                    padding: '4px 8px',
-                    borderRadius: 4,
-                    fontSize: 11,
-                    marginLeft: 'auto'
-                  }}
-                >
-                  <RotateCw size={12} style={{ marginRight: 4 }} />
-                  Reconnect
-                </button>
-              </div>
-            )}
-            {streaming && (
-              <div style={{ color: 'var(--text-muted)', fontSize: 13, padding: '8px 0', display: 'flex', alignItems: 'center', gap: 8 }}>
-                <div>Claude is working...</div>
-                <div style={{ fontSize: 11, opacity: 0.7 }}>
-                  (You can send another message anytime)
-                </div>
-              </div>
-            )}
-            <div ref={bottomRef} />
-          </>
+          </div>
         )}
-        </div>
 
         {/* Auto-scroll toggle button - only show in existing chat mode */}
-        {id && (
+        {id && viewMode === "chat" && (
           <button
             onClick={toggleAutoScroll}
             style={{
-              position: 'absolute',
-              bottom: '20px',
-              right: '20px',
-              background: autoScroll ? 'var(--accent)' : 'var(--bg-secondary)',
-              color: autoScroll ? '#fff' : 'var(--text)',
-              border: autoScroll ? 'none' : '1px solid var(--border)',
-              borderRadius: '50%',
-              width: '40px',
-              height: '40px',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+              position: "absolute",
+              bottom: "20px",
+              right: "20px",
+              background: autoScroll ? "var(--accent)" : "var(--bg-secondary)",
+              color: autoScroll ? "#fff" : "var(--text)",
+              border: autoScroll ? "none" : "1px solid var(--border)",
+              borderRadius: "50%",
+              width: "40px",
+              height: "40px",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
               zIndex: 10,
-              transition: 'all 0.2s ease',
+              transition: "all 0.2s ease",
             }}
             onMouseEnter={(e) => {
-              e.currentTarget.style.transform = 'scale(1.1)';
+              e.currentTarget.style.transform = "scale(1.1)";
             }}
             onMouseLeave={(e) => {
-              e.currentTarget.style.transform = 'scale(1)';
+              e.currentTarget.style.transform = "scale(1)";
             }}
-            title={autoScroll ? 'Auto-scroll is ON - Click to disable' : 'Auto-scroll is OFF - Click to enable'}
+            title={autoScroll ? "Auto-scroll is ON - Click to disable" : "Auto-scroll is OFF - Click to enable"}
           >
             <ArrowDown size={20} />
           </button>
@@ -1134,26 +1206,28 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
       {/* Branch selector for git repos - shown above prompt for new chats */}
       {!id && info?.is_git_repo && !pendingAction && (
-        <div style={{ padding: '0 16px' }}>
-          <BranchSelector
-            folder={folder}
-            currentBranch={info.git_branch || 'main'}
-            onChange={setBranchConfig}
-          />
+        <div style={{ padding: "0 16px" }}>
+          <BranchSelector folder={folder} currentBranch={info.git_branch || "main"} onChange={setBranchConfig} />
         </div>
       )}
 
       {pendingAction ? (
         <FeedbackPanel action={pendingAction} onRespond={handleRespond} />
       ) : (
-        <PromptInput onSend={handleSend} disabled={!id && streaming} onSaveDraft={handleSaveDraft} slashCommands={slashCommands} onSetValue={setPromptInputSetValue} />
+        <PromptInput
+          onSend={handleSend}
+          disabled={!id && streaming}
+          onSaveDraft={handleSaveDraft}
+          slashCommands={slashCommands}
+          onSetValue={setPromptInputSetValue}
+        />
       )}
 
       <DraftModal
         isOpen={showDraftModal}
         onClose={() => {
           setShowDraftModal(false);
-          setDraftMessage('');
+          setDraftMessage("");
           setDraftSuccessCallback(null);
         }}
         chatId={id || null}

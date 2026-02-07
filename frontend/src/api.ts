@@ -1,4 +1,4 @@
-const BASE = '/api';
+const BASE = "/api";
 
 export interface SlashCommand {
   name: string;
@@ -40,8 +40,8 @@ export interface Chat {
 }
 
 export interface ParsedMessage {
-  role: 'user' | 'assistant';
-  type: 'text' | 'thinking' | 'tool_use' | 'tool_result';
+  role: "user" | "assistant";
+  type: "text" | "thinking" | "tool_use" | "tool_result";
   content: string;
   toolName?: string;
   toolUseId?: string;
@@ -58,14 +58,14 @@ export interface ChatListResponse {
 
 export async function listChats(limit?: number, offset?: number): Promise<ChatListResponse> {
   const params = new URLSearchParams();
-  if (limit !== undefined) params.append('limit', limit.toString());
-  if (offset !== undefined) params.append('offset', offset.toString());
+  if (limit !== undefined) params.append("limit", limit.toString());
+  if (offset !== undefined) params.append("offset", offset.toString());
 
-  const res = await fetch(`${BASE}/chats${params.toString() ? `?${params}` : ''}`);
+  const res = await fetch(`${BASE}/chats${params.toString() ? `?${params}` : ""}`);
   return res.json();
 }
 
-export type PermissionLevel = 'allow' | 'ask' | 'deny';
+export type PermissionLevel = "allow" | "ask" | "deny";
 
 export interface DefaultPermissions {
   fileRead: PermissionLevel;
@@ -76,8 +76,8 @@ export interface DefaultPermissions {
 
 export async function createChat(folder: string, sessionId: string, defaultPermissions?: DefaultPermissions): Promise<Chat> {
   const res = await fetch(`${BASE}/chats`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ folder, sessionId, defaultPermissions }),
   });
   return res.json();
@@ -95,13 +95,13 @@ export async function getNewChatInfo(folder: string): Promise<NewChatInfo> {
   const res = await fetch(`${BASE}/chats/new/info?folder=${encodeURIComponent(folder)}`);
   if (!res.ok) {
     const error = await res.json();
-    throw new Error(error.error || 'Failed to get chat info');
+    throw new Error(error.error || "Failed to get chat info");
   }
   return res.json();
 }
 
 export async function deleteChat(id: string): Promise<void> {
-  await fetch(`${BASE}/chats/${id}`, { method: 'DELETE' });
+  await fetch(`${BASE}/chats/${id}`, { method: "DELETE" });
 }
 
 export async function getChat(id: string): Promise<Chat> {
@@ -121,7 +121,7 @@ export async function getPending(id: string): Promise<any | null> {
 }
 
 export async function stopChat(id: string): Promise<void> {
-  await fetch(`${BASE}/chats/${id}/stop`, { method: 'POST' });
+  await fetch(`${BASE}/chats/${id}/stop`, { method: "POST" });
 }
 
 export async function respondToChat(
@@ -131,8 +131,8 @@ export async function respondToChat(
   updatedPermissions?: unknown[],
 ): Promise<{ ok: boolean; toolName?: string }> {
   const res = await fetch(`${BASE}/chats/${id}/respond`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ allow, updatedInput, updatedPermissions }),
   });
   if (!res.ok) {
@@ -143,14 +143,14 @@ export async function respondToChat(
 
 export interface SessionStatus {
   active: boolean;
-  type: 'web' | 'cli' | 'inactive' | 'none';
+  type: "web" | "cli" | "inactive" | "none";
   hasPending?: boolean;
   lastActivity?: string;
   fileSize?: number;
 }
 
 export async function getSessionStatus(id: string): Promise<SessionStatus> {
-  const res = await fetch(`${BASE}/chats/${id}/status`, { credentials: 'include' });
+  const res = await fetch(`${BASE}/chats/${id}/status`, { credentials: "include" });
   return res.json();
 }
 
@@ -171,12 +171,12 @@ export interface ImageUploadResult {
 
 export async function uploadImages(chatId: string, images: File[]): Promise<ImageUploadResult> {
   const formData = new FormData();
-  images.forEach(image => {
-    formData.append('images', image);
+  images.forEach((image) => {
+    formData.append("images", image);
   });
 
   const res = await fetch(`${BASE}/chats/${chatId}/images`, {
-    method: 'POST',
+    method: "POST",
     body: formData,
   });
 
@@ -193,7 +193,7 @@ export interface QueueItem {
   chat_id: string | null;
   user_message: string;
   scheduled_time: string;
-  status: 'draft' | 'pending' | 'running' | 'completed' | 'failed';
+  status: "draft" | "pending" | "running" | "completed" | "failed";
   created_at: string;
   retry_count: number;
   error_message: string | null;
@@ -204,58 +204,64 @@ export interface QueueItem {
 
 export async function getQueueItems(status?: string, chatId?: string): Promise<QueueItem[]> {
   const params = new URLSearchParams();
-  if (status) params.append('status', status);
-  if (chatId) params.append('chat_id', chatId);
+  if (status) params.append("status", status);
+  if (chatId) params.append("chat_id", chatId);
 
   const res = await fetch(`${BASE}/queue?${params}`);
   return res.json();
 }
 
-export async function scheduleMessage(chatId: string | null, message: string, scheduledTime: string, folder?: string, defaultPermissions?: DefaultPermissions): Promise<QueueItem> {
+export async function scheduleMessage(
+  chatId: string | null,
+  message: string,
+  scheduledTime: string,
+  folder?: string,
+  defaultPermissions?: DefaultPermissions,
+): Promise<QueueItem> {
   const res = await fetch(`${BASE}/queue`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
       user_message: message,
       scheduled_time: scheduledTime,
       is_draft: false,
       ...(folder && { folder }),
-      ...(defaultPermissions && { defaultPermissions })
-    })
+      ...(defaultPermissions && { defaultPermissions }),
+    }),
   });
   return res.json();
 }
 
 export async function createDraft(chatId: string | null, message: string, folder?: string, defaultPermissions?: DefaultPermissions): Promise<QueueItem> {
   const res = await fetch(`${BASE}/queue`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       chat_id: chatId,
       user_message: message,
       is_draft: true,
       ...(folder && { folder }),
-      ...(defaultPermissions && { defaultPermissions })
-    })
+      ...(defaultPermissions && { defaultPermissions }),
+    }),
   });
   return res.json();
 }
 
 export async function convertDraftToScheduled(id: string, scheduledTime: string): Promise<void> {
   await fetch(`${BASE}/queue/${id}/convert-to-scheduled`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ scheduled_time: scheduledTime })
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ scheduled_time: scheduledTime }),
   });
 }
 
 export async function cancelQueueItem(id: string): Promise<void> {
-  await fetch(`${BASE}/queue/${id}`, { method: 'DELETE' });
+  await fetch(`${BASE}/queue/${id}`, { method: "DELETE" });
 }
 
 export async function executeNow(id: string): Promise<void> {
-  await fetch(`${BASE}/queue/${id}/execute-now`, { method: 'POST' });
+  await fetch(`${BASE}/queue/${id}/execute-now`, { method: "POST" });
 }
 
 export async function addToBacklog(chatId: string | null, message: string, folder?: string, defaultPermissions?: DefaultPermissions): Promise<QueueItem> {
@@ -269,12 +275,12 @@ export async function getSlashCommands(chatId: string): Promise<string[]> {
   return data.slashCommands || [];
 }
 
-export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slashCommands: string[], plugins: Plugin[] }> {
+export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slashCommands: string[]; plugins: Plugin[] }> {
   const res = await fetch(`${BASE}/chats/${chatId}/slash-commands`);
   const data = await res.json();
   return {
     slashCommands: data.slashCommands || [],
-    plugins: data.plugins || []
+    plugins: data.plugins || [],
   };
 }
 
@@ -290,7 +296,16 @@ export async function getGitBranches(folder: string): Promise<{ branches: string
   const res = await fetch(`${BASE}/git/branches?folder=${encodeURIComponent(folder)}`);
   if (!res.ok) {
     const error = await res.json();
-    throw new Error(error.error || 'Failed to list branches');
+    throw new Error(error.error || "Failed to list branches");
+  }
+  return res.json();
+}
+
+export async function getGitDiff(folder: string): Promise<{ diff: string }> {
+  const res = await fetch(`${BASE}/git/diff?folder=${encodeURIComponent(folder)}`);
+  if (!res.ok) {
+    const error = await res.json();
+    throw new Error(error.error || "Failed to get diff");
   }
   return res.json();
 }
