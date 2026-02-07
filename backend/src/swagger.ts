@@ -7,8 +7,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const doc = {
   info: {
     title: "Claude Code UI API",
-    description:
-      "API for managing Claude Code chat sessions, message streaming, image uploads, scheduled queue items, folder browsing, and git operations.",
+    description: "API for managing Claude Code chat sessions, message streaming, image uploads, draft messages, folder browsing, and git operations.",
     version: "1.0.0",
   },
   host: "localhost:8000",
@@ -21,27 +20,23 @@ const doc = {
     },
     {
       name: "Chats",
-      description:
-        "Chat session management — list, create, get, delete chats and retrieve messages",
+      description: "Chat session management — list, create, get, delete chats and retrieve messages",
     },
     {
       name: "Stream",
-      description:
-        "Real-time messaging via SSE — send messages, connect to streams, handle pending requests",
+      description: "Real-time messaging via SSE — send messages, connect to streams, handle pending requests",
     },
     {
       name: "Images",
       description: "Image upload, retrieval, and deletion for chat sessions",
     },
     {
-      name: "Queue",
-      description:
-        "Scheduled and draft message queue — create, execute, convert, and manage queued items",
+      name: "Drafts",
+      description: "Draft messages — save, retrieve, execute on demand, and delete draft messages",
     },
     {
       name: "Folders",
-      description:
-        "Directory browsing, path validation, suggestions, and recent folders",
+      description: "Directory browsing, path validation, suggestions, and recent folders",
     },
     {
       name: "Git",
@@ -66,13 +61,11 @@ const options = {
   openapi: "3.0.0" as const,
 };
 
-swaggerAutogen(options)(outputFile, routes, doc).then(
-  (result) => {
-    if (result && typeof result === "object" && "success" in result && result.success) {
-      console.log("✅ Swagger spec generated:", outputFile);
-    } else {
-      console.error("❌ Swagger generation failed");
-      process.exit(1);
-    }
+swaggerAutogen(options)(outputFile, routes, doc).then((result) => {
+  if (result && typeof result === "object" && "success" in result && result.success) {
+    console.log("✅ Swagger spec generated:", outputFile);
+  } else {
+    console.error("❌ Swagger generation failed");
+    process.exit(1);
   }
-);
+});

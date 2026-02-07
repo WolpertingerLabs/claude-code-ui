@@ -15,7 +15,6 @@ import { queueRouter } from "./routes/queue.js";
 import { foldersRouter } from "./routes/folders.js";
 import { gitRouter } from "./routes/git.js";
 import { loginHandler, logoutHandler, checkAuthHandler, requireAuth } from "./auth.js";
-import { queueProcessor } from "./services/queue-processor.js";
 import { existsSync, readFileSync } from "fs";
 
 const app = express();
@@ -100,20 +99,15 @@ app.get("*", (_req, res) => {
 
 app.listen(PORT, () => {
   console.log(`Backend running on http://localhost:${PORT}`);
-
-  // Start the queue processor
-  queueProcessor.start();
 });
 
 // Graceful shutdown
 process.on("SIGTERM", () => {
   console.log("SIGTERM received, shutting down gracefully");
-  queueProcessor.stop();
   process.exit(0);
 });
 
 process.on("SIGINT", () => {
   console.log("SIGINT received, shutting down gracefully");
-  queueProcessor.stop();
   process.exit(0);
 });

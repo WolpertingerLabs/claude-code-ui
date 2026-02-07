@@ -4,29 +4,28 @@ import { sendMessage, type StreamEvent } from "../services/claude.js";
 
 export const queueRouter = Router();
 
-// Get all queued messages
+// Get all draft messages
 queueRouter.get("/", (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'List queue items'
-  // #swagger.description = 'Returns all queued messages, optionally filtered by status or chat ID.'
-  /* #swagger.parameters['status'] = { in: 'query', type: 'string', description: 'Filter by status (pending, running, failed, draft)' } */
+  // #swagger.tags = ['Drafts']
+  // #swagger.summary = 'List draft messages'
+  // #swagger.description = 'Returns all saved draft messages, optionally filtered by chat ID.'
   /* #swagger.parameters['chat_id'] = { in: 'query', type: 'string', description: 'Filter by chat ID' } */
-  /* #swagger.responses[200] = { description: "Array of queue items" } */
-  const { status, chat_id } = req.query;
+  /* #swagger.responses[200] = { description: "Array of draft items" } */
+  const { chat_id } = req.query;
 
   try {
-    const queueItems = queueFileService.getAllQueueItems(status as string | undefined, chat_id as string | undefined);
-    res.json(queueItems);
+    const items = queueFileService.getAllQueueItems(chat_id as string | undefined);
+    res.json(items);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Schedule a new message or create a draft
+// Create a new draft
 queueRouter.post("/", (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'Create queue item or draft'
-  // #swagger.description = 'Schedule a message for later execution or save as a draft. For scheduled items, scheduled_time is required. Either chat_id (existing chat) or folder (new chat) must be provided.'
+  // #swagger.tags = ['Drafts']
+  // #swagger.summary = 'Create a draft message'
+  // #swagger.description = 'Save a message as a draft for later execution. Either chat_id (existing chat) or folder (new chat) must be provided.'
   /* #swagger.requestBody = {
     required: true,
     content: {
@@ -36,30 +35,21 @@ queueRouter.post("/", (req, res) => {
           required: ["user_message"],
           properties: {
             chat_id: { type: "string", description: "Existing chat ID (null for new chat)" },
-            user_message: { type: "string", description: "The message to send" },
-            scheduled_time: { type: "string", format: "date-time", description: "ISO 8601 time to send (required unless is_draft)" },
+            user_message: { type: "string", description: "The message to save" },
             folder: { type: "string", description: "Project folder for new chats" },
-            defaultPermissions: { type: "object", description: "Default permissions for new chats" },
-            is_draft: { type: "boolean", description: "Save as draft instead of scheduling" }
+            defaultPermissions: { type: "object", description: "Default permissions for new chats" }
           }
         }
       }
     }
   } */
-  /* #swagger.responses[201] = { description: "Queue item created" } */
+  /* #swagger.responses[201] = { description: "Draft created" } */
   /* #swagger.responses[400] = { description: "Missing required fields" } */
-  const { chat_id, user_message, scheduled_time, folder, defaultPermissions, is_draft } = req.body;
+  const { chat_id, user_message, folder, defaultPermissions } = req.body;
 
   if (!user_message) {
     return res.status(400).json({
       error: "user_message is required",
-    });
-  }
-
-  // For scheduled items, scheduled_time is required
-  if (!is_draft && !scheduled_time) {
-    return res.status(400).json({
-      error: "scheduled_time is required for non-draft items",
     });
   }
 
@@ -71,118 +61,67 @@ queueRouter.post("/", (req, res) => {
   }
 
   try {
-    const queueItem = queueFileService.createQueueItem(
-      chat_id || null,
-      user_message,
-      scheduled_time || new Date().toISOString(),
-      folder,
-      defaultPermissions,
-      is_draft,
-    );
-    res.status(201).json(queueItem);
+    const item = queueFileService.createQueueItem(chat_id || null, user_message, folder, defaultPermissions);
+    res.status(201).json(item);
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
 });
 
-// Get a specific queue item
+// Get a specific draft
 queueRouter.get("/:id", (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'Get queue item'
-  // #swagger.description = 'Retrieve a specific queue item by ID.'
-  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Queue item ID' } */
-  /* #swagger.responses[200] = { description: "Queue item details" } */
-  /* #swagger.responses[404] = { description: "Queue item not found" } */
-  const queueItem = queueFileService.getQueueItem(req.params.id);
-  if (!queueItem) {
-    return res.status(404).json({ error: "Queue item not found" });
+  // #swagger.tags = ['Drafts']
+  // #swagger.summary = 'Get draft message'
+  // #swagger.description = 'Retrieve a specific draft message by ID.'
+  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Draft item ID' } */
+  /* #swagger.responses[200] = { description: "Draft item details" } */
+  /* #swagger.responses[404] = { description: "Draft not found" } */
+  const item = queueFileService.getQueueItem(req.params.id);
+  if (!item) {
+    return res.status(404).json({ error: "Draft not found" });
   }
-  res.json(queueItem);
+  res.json(item);
 });
 
-// Cancel/delete a queue item
+// Delete a draft
 queueRouter.delete("/:id", (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'Delete queue item'
-  // #swagger.description = 'Cancel and delete a pending queue item.'
-  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Queue item ID' } */
-  /* #swagger.responses[200] = { description: "Queue item deleted" } */
-  /* #swagger.responses[404] = { description: "Queue item not found or not pending" } */
-  const queueItem = queueFileService.getQueueItem(req.params.id);
-
-  if (!queueItem || queueItem.status !== "pending") {
-    return res.status(404).json({ error: "Queue item not found or not pending" });
-  }
-
+  // #swagger.tags = ['Drafts']
+  // #swagger.summary = 'Delete draft message'
+  // #swagger.description = 'Delete a saved draft message.'
+  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Draft item ID' } */
+  /* #swagger.responses[200] = { description: "Draft deleted" } */
+  /* #swagger.responses[404] = { description: "Draft not found" } */
   const deleted = queueFileService.deleteQueueItem(req.params.id);
   if (deleted) {
     res.json({ ok: true });
   } else {
-    res.status(500).json({ error: "Failed to delete queue item" });
+    res.status(404).json({ error: "Draft not found" });
   }
 });
 
-// Convert a draft to a scheduled item
-queueRouter.post("/:id/convert-to-scheduled", (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'Convert draft to scheduled'
-  // #swagger.description = 'Convert a draft queue item to a scheduled item with a specified time.'
-  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Queue item ID' } */
-  /* #swagger.requestBody = {
-    required: true,
-    content: {
-      "application/json": {
-        schema: {
-          type: "object",
-          required: ["scheduled_time"],
-          properties: {
-            scheduled_time: { type: "string", format: "date-time", description: "ISO 8601 time to schedule" }
-          }
-        }
-      }
-    }
-  } */
-  /* #swagger.responses[200] = { description: "Draft converted" } */
-  /* #swagger.responses[404] = { description: "Draft not found or cannot be converted" } */
-  const { scheduled_time } = req.body;
-
-  if (!scheduled_time) {
-    return res.status(400).json({ error: "scheduled_time is required" });
-  }
-
-  const converted = queueFileService.convertDraftToScheduled(req.params.id, scheduled_time);
-
-  if (converted) {
-    res.json({ ok: true });
-  } else {
-    res.status(404).json({ error: "Draft not found or cannot be converted" });
-  }
-});
-
-// Execute a queue item immediately
+// Execute a draft immediately
 queueRouter.post("/:id/execute-now", async (req, res) => {
-  // #swagger.tags = ['Queue']
-  // #swagger.summary = 'Execute queue item now'
-  // #swagger.description = 'Immediately execute a pending or draft queue item. Makes an internal API call to send the message.'
-  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Queue item ID' } */
+  // #swagger.tags = ['Drafts']
+  // #swagger.summary = 'Execute draft now'
+  // #swagger.description = 'Immediately execute a draft message, sending it to Claude. The draft is deleted on success.'
+  /* #swagger.parameters['id'] = { in: 'path', required: true, type: 'string', description: 'Draft item ID' } */
   /* #swagger.responses[200] = { description: "Execution started" } */
-  /* #swagger.responses[400] = { description: "Queue item not pending or draft" } */
-  /* #swagger.responses[404] = { description: "Queue item not found" } */
+  /* #swagger.responses[404] = { description: "Draft not found" } */
   const queueItem = queueFileService.getQueueItem(req.params.id);
 
   if (!queueItem) {
-    return res.status(404).json({ error: "Queue item not found" });
+    return res.status(404).json({ error: "Draft not found" });
   }
 
-  if (queueItem.status !== "pending" && queueItem.status !== "draft") {
-    return res.status(400).json({ error: "Queue item is not pending or draft" });
+  if (queueItem.status !== "draft") {
+    return res.status(400).json({ error: "Item is not a draft" });
   }
 
   try {
-    // Update status to running
-    queueFileService.updateQueueItem(req.params.id, { status: "running" });
+    // Delete the draft before executing
+    queueFileService.deleteQueueItem(req.params.id);
 
-    // Call the service layer directly instead of making HTTP requests
+    // Call the service layer directly to send the message
     const emitter = await sendMessage(
       queueItem.chat_id
         ? { chatId: queueItem.chat_id, prompt: queueItem.user_message }
@@ -207,15 +146,8 @@ queueRouter.post("/:id/execute-now", async (req, res) => {
       emitter.on("event", onEvent);
     });
 
-    // Delete the queue item when completed successfully
-    queueFileService.deleteQueueItem(req.params.id);
     res.json({ success: true, message: "Message executed successfully" });
   } catch (error: any) {
-    queueFileService.updateQueueItem(req.params.id, {
-      status: "failed",
-      error_message: error.message,
-      retry_count: queueItem.retry_count + 1,
-    });
     res.status(500).json({ error: error.message });
   }
 });

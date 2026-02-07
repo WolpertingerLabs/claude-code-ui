@@ -1,127 +1,57 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, RotateCw, Clock } from "lucide-react";
-import { getQueueItems, cancelQueueItem, executeNow, scheduleMessage, convertDraftToScheduled, type QueueItem } from "../api";
-import { getMinDateTime } from "../utils/datetime";
-import ModalOverlay from "../components/ModalOverlay";
+import { ChevronLeft, RotateCw } from "lucide-react";
+import { getDrafts, deleteDraft, executeDraft, type QueueItem } from "../api";
 
 export default function Queue() {
   const navigate = useNavigate();
-  const [queueItems, setQueueItems] = useState<QueueItem[]>([]);
+  const [drafts, setDrafts] = useState<QueueItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<string>("draft");
   const [error, setError] = useState<string | null>(null);
-  const [showScheduleModal, setShowScheduleModal] = useState(false);
-  const [schedulingItem, setSchedulingItem] = useState<QueueItem | null>(null);
-  const [scheduledTime, setScheduledTime] = useState("");
 
-  const loadQueueItems = useCallback(async (status?: string) => {
+  const loadDrafts = useCallback(async () => {
     try {
       setLoading(true);
-      const items = await getQueueItems(status);
-      setQueueItems(items);
+      const items = await getDrafts();
+      setDrafts(items);
     } catch (err: any) {
-      setError(err.message || "Failed to load queue");
+      setError(err.message || "Failed to load drafts");
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    loadQueueItems(activeTab === "all" ? undefined : activeTab);
-  }, [activeTab, loadQueueItems]);
+    loadDrafts();
+  }, [loadDrafts]);
 
-  const handleCancel = useCallback(
+  const handleDelete = useCallback(
     async (id: string) => {
       try {
-        await cancelQueueItem(id);
-        await loadQueueItems(activeTab === "all" ? undefined : activeTab);
+        await deleteDraft(id);
+        await loadDrafts();
       } catch (err: any) {
-        setError(err.message || "Failed to cancel item");
+        setError(err.message || "Failed to delete draft");
       }
     },
-    [activeTab, loadQueueItems],
+    [loadDrafts],
   );
 
   const handleExecuteNow = useCallback(
     async (id: string) => {
       try {
-        await executeNow(id);
-        await loadQueueItems(activeTab === "all" ? undefined : activeTab);
+        await executeDraft(id);
+        await loadDrafts();
       } catch (err: any) {
-        setError(err.message || "Failed to execute item");
+        setError(err.message || "Failed to execute draft");
       }
     },
-    [activeTab, loadQueueItems],
+    [loadDrafts],
   );
-
-  const handleSchedule = useCallback((item: QueueItem) => {
-    setSchedulingItem(item);
-    setShowScheduleModal(true);
-  }, []);
-
-  const handleScheduleSubmit = useCallback(async () => {
-    if (!schedulingItem || !scheduledTime) return;
-
-    try {
-      if (schedulingItem.status === "draft") {
-        // Convert draft to scheduled
-        await convertDraftToScheduled(schedulingItem.id, new Date(scheduledTime).toISOString());
-      } else {
-        // Cancel the existing item and create new scheduled item
-        await cancelQueueItem(schedulingItem.id);
-        await scheduleMessage(schedulingItem.chat_id, schedulingItem.user_message, new Date(scheduledTime).toISOString());
-      }
-      // Refresh the list
-      await loadQueueItems(activeTab === "all" ? undefined : activeTab);
-      // Close modal
-      setShowScheduleModal(false);
-      setSchedulingItem(null);
-      setScheduledTime("");
-    } catch (err: any) {
-      setError(err.message || "Failed to schedule item");
-    }
-  }, [schedulingItem, scheduledTime, activeTab, loadQueueItems]);
 
   const formatTime = (isoString: string) => {
     return new Date(isoString).toLocaleString();
   };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "draft":
-        return "#8b5cf6";
-      case "pending":
-        return "#f59e0b";
-      case "running":
-        return "#3b82f6";
-      case "completed":
-        return "#10b981";
-      case "failed":
-        return "#ef4444";
-      default:
-        return "var(--text-muted)";
-    }
-  };
-
-  const statusCounts = useMemo(() => {
-    const counts: Record<string, number> = { draft: 0, pending: 0, running: 0, completed: 0, failed: 0 };
-    for (const item of queueItems) {
-      if (item.status in counts) counts[item.status]++;
-    }
-    return counts;
-  }, [queueItems]);
-
-  const tabs = [
-    { key: "draft", label: "Drafts", count: statusCounts.draft },
-    { key: "pending", label: "Pending", count: statusCounts.pending },
-    { key: "running", label: "Running", count: statusCounts.running },
-    { key: "completed", label: "Completed", count: statusCounts.completed },
-    { key: "failed", label: "Failed", count: statusCounts.failed },
-    { key: "all", label: "All", count: queueItems.length },
-  ];
-
-  const filteredItems = activeTab === "all" ? queueItems : queueItems.filter((item) => item.status === activeTab);
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
@@ -141,7 +71,7 @@ export default function Queue() {
         </button>
         <div style={{ fontSize: 18, fontWeight: 600 }}>Drafts</div>
         <button
-          onClick={() => loadQueueItems(activeTab === "all" ? undefined : activeTab)}
+          onClick={() => loadDrafts()}
           style={{
             marginLeft: "auto",
             background: "var(--accent)",
@@ -155,35 +85,6 @@ export default function Queue() {
           Refresh
         </button>
       </header>
-
-      {/* Tabs */}
-      <div
-        style={{
-          display: "flex",
-          borderBottom: "1px solid var(--border)",
-          background: "var(--bg-secondary)",
-        }}
-      >
-        {tabs.map((tab) => (
-          <button
-            key={tab.key}
-            onClick={() => setActiveTab(tab.key)}
-            style={{
-              padding: "12px 16px",
-              border: "none",
-              background: activeTab === tab.key ? "var(--bg)" : "transparent",
-              color: activeTab === tab.key ? "var(--text)" : "var(--text-muted)",
-              borderBottom: activeTab === tab.key ? "2px solid var(--accent)" : "2px solid transparent",
-              fontSize: 14,
-              fontWeight: 500,
-              cursor: "pointer",
-              transition: "all 0.2s ease",
-            }}
-          >
-            {tab.label} ({tab.count})
-          </button>
-        ))}
-      </div>
 
       {/* Content */}
       <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
@@ -203,13 +104,11 @@ export default function Queue() {
 
         {loading ? (
           <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>Loading...</div>
-        ) : filteredItems.length === 0 ? (
-          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>
-            {activeTab === "draft" ? "No draft messages" : activeTab === "all" ? "No messages in queue" : `No ${activeTab} messages in queue`}
-          </div>
+        ) : drafts.length === 0 ? (
+          <div style={{ textAlign: "center", padding: 40, color: "var(--text-muted)" }}>No draft messages</div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            {filteredItems.map((item) => (
+            {drafts.map((item) => (
               <div
                 key={item.id}
                 style={{
@@ -221,19 +120,6 @@ export default function Queue() {
               >
                 <div style={{ display: "flex", alignItems: "flex-start", gap: 12 }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 8 }}>
-                      <div
-                        style={{
-                          width: 8,
-                          height: 8,
-                          borderRadius: "50%",
-                          background: getStatusColor(item.status),
-                        }}
-                      />
-                      <span style={{ fontSize: 12, fontWeight: 500, textTransform: "uppercase" }}>{item.status}</span>
-                      {item.retry_count > 0 && <span style={{ fontSize: 11, color: "var(--text-muted)" }}>(Retry #{item.retry_count})</span>}
-                    </div>
-
                     <div
                       style={{
                         background: "var(--surface)",
@@ -251,89 +137,57 @@ export default function Queue() {
                     </div>
 
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
-                      {item.status !== "draft" && <span>Scheduled: {formatTime(item.scheduled_time)}</span>}
                       <span>Created: {formatTime(item.created_at)}</span>
-                      <span>Chat ID: {item.chat_id}</span>
+                      {item.chat_id && <span>Chat: {item.chat_id}</span>}
+                      {item.folder && !item.chat_id && <span>Folder: {item.folder}</span>}
                     </div>
-
-                    {item.error_message && (
-                      <div
-                        style={{
-                          marginTop: 8,
-                          padding: 8,
-                          background: "var(--danger-bg, rgba(255, 0, 0, 0.1))",
-                          borderRadius: 4,
-                          fontSize: 12,
-                          color: "var(--danger)",
-                        }}
-                      >
-                        Error: {item.error_message}
-                      </div>
-                    )}
                   </div>
 
                   <div style={{ display: "flex", flexDirection: "column", gap: 8, flexShrink: 0 }}>
-                    {(item.status === "draft" || item.status === "pending") && (
-                      <>
-                        <button
-                          onClick={() => handleExecuteNow(item.id)}
-                          style={{
-                            background: "var(--accent)",
-                            color: "#fff",
-                            padding: "6px 12px",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            border: "none",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Execute Now
-                        </button>
-                        <button
-                          onClick={() => handleSchedule(item)}
-                          style={{
-                            background: "var(--bg-secondary)",
-                            color: "var(--text)",
-                            padding: "6px 12px",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            border: "1px solid var(--border)",
-                            cursor: "pointer",
-                          }}
-                        >
-                          <Clock size={14} style={{ marginRight: 6 }} />
-                          {item.status === "draft" ? "Schedule" : "Reschedule"}
-                        </button>
-                        <button
-                          onClick={() => handleCancel(item.id)}
-                          style={{
-                            background: "var(--danger)",
-                            color: "#fff",
-                            padding: "6px 12px",
-                            borderRadius: 4,
-                            fontSize: 12,
-                            border: "none",
-                            cursor: "pointer",
-                          }}
-                        >
-                          Delete
-                        </button>
-                      </>
-                    )}
                     <button
-                      onClick={() => navigate(`/chat/${item.chat_id}`)}
+                      onClick={() => handleExecuteNow(item.id)}
                       style={{
-                        background: "var(--bg-secondary)",
-                        color: "var(--text)",
+                        background: "var(--accent)",
+                        color: "#fff",
                         padding: "6px 12px",
                         borderRadius: 4,
                         fontSize: 12,
-                        border: "1px solid var(--border)",
+                        border: "none",
                         cursor: "pointer",
                       }}
                     >
-                      View Chat
+                      Execute Now
                     </button>
+                    <button
+                      onClick={() => handleDelete(item.id)}
+                      style={{
+                        background: "var(--danger)",
+                        color: "#fff",
+                        padding: "6px 12px",
+                        borderRadius: 4,
+                        fontSize: 12,
+                        border: "none",
+                        cursor: "pointer",
+                      }}
+                    >
+                      Delete
+                    </button>
+                    {item.chat_id && (
+                      <button
+                        onClick={() => navigate(`/chat/${item.chat_id}`)}
+                        style={{
+                          background: "var(--bg-secondary)",
+                          color: "var(--text)",
+                          padding: "6px 12px",
+                          borderRadius: 4,
+                          fontSize: 12,
+                          border: "1px solid var(--border)",
+                          cursor: "pointer",
+                        }}
+                      >
+                        View Chat
+                      </button>
+                    )}
                   </div>
                 </div>
               </div>
@@ -341,95 +195,6 @@ export default function Queue() {
           </div>
         )}
       </div>
-
-      {/* Schedule Modal */}
-      {showScheduleModal && schedulingItem && (
-        <ModalOverlay>
-          <div
-            style={{
-              background: "var(--bg)",
-              borderRadius: 8,
-              padding: 24,
-              width: "90%",
-              maxWidth: 400,
-              border: "1px solid var(--border)",
-            }}
-          >
-            <h2 style={{ margin: "0 0 16px 0", fontSize: 18 }}>Schedule Draft</h2>
-
-            <div style={{ marginBottom: 16 }}>
-              <div style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 8 }}>Message preview:</div>
-              <div
-                style={{
-                  background: "var(--surface)",
-                  padding: 8,
-                  borderRadius: 4,
-                  fontSize: 13,
-                  maxHeight: 80,
-                  overflow: "auto",
-                  border: "1px solid var(--border)",
-                }}
-              >
-                {schedulingItem.user_message}
-              </div>
-            </div>
-
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Schedule for:</label>
-              <input
-                type="datetime-local"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                min={getMinDateTime()}
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  background: "var(--bg)",
-                  color: "var(--text)",
-                  fontSize: 14,
-                }}
-              />
-            </div>
-
-            <div style={{ display: "flex", gap: 12, justifyContent: "flex-end" }}>
-              <button
-                onClick={() => {
-                  setShowScheduleModal(false);
-                  setSchedulingItem(null);
-                  setScheduledTime("");
-                }}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 6,
-                  fontSize: 14,
-                  background: "var(--bg-secondary)",
-                  border: "1px solid var(--border)",
-                  color: "var(--text)",
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleScheduleSubmit}
-                disabled={!scheduledTime}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 6,
-                  fontSize: 14,
-                  background: !scheduledTime ? "var(--border)" : "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  cursor: !scheduledTime ? "default" : "pointer",
-                }}
-              >
-                Schedule
-              </button>
-            </div>
-          </div>
-        </ModalOverlay>
-      )}
     </div>
   );
 }

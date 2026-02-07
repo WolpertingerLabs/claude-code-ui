@@ -1,6 +1,5 @@
-import { useState, useEffect } from "react";
-import { createDraft, scheduleMessage, type DefaultPermissions } from "../api";
-import { getMinDateTime } from "../utils/datetime";
+import { useState } from "react";
+import { createDraft, type DefaultPermissions } from "../api";
 import ModalOverlay from "./ModalOverlay";
 
 interface DraftModalProps {
@@ -14,19 +13,8 @@ interface DraftModalProps {
 }
 
 export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess, folder, defaultPermissions }: DraftModalProps) {
-  const [scheduleEnabled, setScheduleEnabled] = useState(false);
-  const [scheduledTime, setScheduledTime] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    if (isOpen) {
-      // Reset state when modal opens
-      setScheduleEnabled(false);
-      setScheduledTime("");
-      setError(null);
-    }
-  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -42,23 +30,6 @@ export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess
       onClose();
     } catch (err: any) {
       setError(err.message || "Failed to save draft");
-    } finally {
-      setIsSubmitting(false);
-    }
-  };
-
-  const handleSaveScheduled = async () => {
-    if (!message.trim() || !scheduledTime) return;
-
-    setIsSubmitting(true);
-    setError(null);
-
-    try {
-      await scheduleMessage(chatId, message.trim(), new Date(scheduledTime).toISOString(), folder, defaultPermissions);
-      onSuccess?.();
-      onClose();
-    } catch (err: any) {
-      setError(err.message || "Failed to save scheduled message");
     } finally {
       setIsSubmitting(false);
     }
@@ -104,34 +75,6 @@ export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess
             </div>
           </div>
 
-          <div style={{ marginBottom: 16 }}>
-            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
-              <input type="checkbox" checked={scheduleEnabled} onChange={(e) => setScheduleEnabled(e.target.checked)} style={{ margin: 0 }} />
-              <span style={{ fontSize: 14, fontWeight: 500 }}>Schedule for later</span>
-            </label>
-          </div>
-
-          {scheduleEnabled && (
-            <div style={{ marginBottom: 16 }}>
-              <label style={{ display: "block", marginBottom: 8, fontSize: 14, fontWeight: 500 }}>Execute at:</label>
-              <input
-                type="datetime-local"
-                value={scheduledTime}
-                onChange={(e) => setScheduledTime(e.target.value)}
-                min={getMinDateTime()}
-                style={{
-                  width: "100%",
-                  padding: 8,
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  background: "var(--bg)",
-                  color: "var(--text)",
-                  fontSize: 14,
-                }}
-              />
-            </div>
-          )}
-
           {error && (
             <div
               style={{
@@ -165,41 +108,22 @@ export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess
               Cancel
             </button>
 
-            {scheduleEnabled ? (
-              <button
-                type="button"
-                onClick={handleSaveScheduled}
-                disabled={isSubmitting || !message.trim() || !scheduledTime}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 6,
-                  fontSize: 14,
-                  background: isSubmitting || !message.trim() || !scheduledTime ? "var(--border)" : "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  cursor: isSubmitting || !message.trim() || !scheduledTime ? "default" : "pointer",
-                }}
-              >
-                {isSubmitting ? "Scheduling..." : "⏰ Save Scheduled"}
-              </button>
-            ) : (
-              <button
-                type="button"
-                onClick={handleSaveDraft}
-                disabled={isSubmitting || !message.trim()}
-                style={{
-                  padding: "8px 16px",
-                  borderRadius: 6,
-                  fontSize: 14,
-                  background: isSubmitting || !message.trim() ? "var(--border)" : "var(--accent)",
-                  color: "#fff",
-                  border: "none",
-                  cursor: isSubmitting || !message.trim() ? "default" : "pointer",
-                }}
-              >
-                {isSubmitting ? "Saving..." : "Save Draft"}
-              </button>
-            )}
+            <button
+              type="button"
+              onClick={handleSaveDraft}
+              disabled={isSubmitting || !message.trim()}
+              style={{
+                padding: "8px 16px",
+                borderRadius: 6,
+                fontSize: 14,
+                background: isSubmitting || !message.trim() ? "var(--border)" : "var(--accent)",
+                color: "#fff",
+                border: "none",
+                cursor: isSubmitting || !message.trim() ? "default" : "pointer",
+              }}
+            >
+              {isSubmitting ? "Saving..." : "Save Draft"}
+            </button>
           </div>
         </div>
       </div>

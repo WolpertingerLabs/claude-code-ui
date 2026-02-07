@@ -14,8 +14,8 @@ if (!existsSync(queueDir)) {
 }
 
 export class QueueFileService {
-  // Get all queue items
-  getAllQueueItems(status?: string, chatId?: string): QueueItem[] {
+  // Get all draft items
+  getAllQueueItems(chatId?: string): QueueItem[] {
     try {
       const files = readdirSync(queueDir).filter((file) => file.endsWith(".json"));
       const items: QueueItem[] = [];
@@ -25,8 +25,8 @@ export class QueueFileService {
           const content = readFileSync(join(queueDir, file), "utf8");
           const item: QueueItem = JSON.parse(content);
 
-          // Apply filters
-          if (status && item.status !== status) continue;
+          // Only include drafts
+          if (item.status !== "draft") continue;
           if (chatId && item.chat_id !== chatId) continue;
 
           items.push(item);
@@ -35,8 +35,8 @@ export class QueueFileService {
         }
       }
 
-      // Sort by scheduled_time
-      return items.sort((a, b) => new Date(a.scheduled_time).getTime() - new Date(b.scheduled_time).getTime());
+      // Sort by created_at (newest first)
+      return items.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
     } catch (error) {
       console.error("Error reading queue directory:", error);
       return [];
@@ -60,15 +60,8 @@ export class QueueFileService {
     }
   }
 
-  // Create a new queue item
-  createQueueItem(
-    chatId: string | null,
-    userMessage: string,
-    scheduledTime: string,
-    folder?: string,
-    defaultPermissions?: DefaultPermissions,
-    isDraft: boolean = false,
-  ): QueueItem {
+  // Create a new draft item
+  createQueueItem(chatId: string | null, userMessage: string, folder?: string, defaultPermissions?: DefaultPermissions): QueueItem {
     const id = uuid();
     const now = new Date().toISOString();
 
@@ -76,11 +69,8 @@ export class QueueFileService {
       id,
       chat_id: chatId,
       user_message: userMessage,
-      scheduled_time: scheduledTime,
-      status: isDraft ? "draft" : "pending",
+      status: "draft",
       created_at: now,
-      retry_count: 0,
-      error_message: null,
       ...(folder && { folder }),
       ...(defaultPermissions && { defaultPermissions }),
     };
@@ -101,20 +91,7 @@ export class QueueFileService {
     return true;
   }
 
-  // Convert a draft to a scheduled item
-  convertDraftToScheduled(id: string, scheduledTime: string): boolean {
-    const item = this.getQueueItem(id);
-    if (!item || item.status !== "draft") {
-      return false;
-    }
-
-    return this.updateQueueItem(id, {
-      status: "pending",
-      scheduled_time: scheduledTime,
-    });
-  }
-
-  // Delete a queue item (when completed successfully)
+  // Delete a queue item
   deleteQueueItem(id: string): boolean {
     const filepath = join(queueDir, `${id}.json`);
 
@@ -135,14 +112,6 @@ export class QueueFileService {
   private saveQueueItem(item: QueueItem): void {
     const filepath = join(queueDir, `${item.id}.json`);
     writeFileSync(filepath, JSON.stringify(item, null, 2));
-  }
-
-  // Get due messages (for the processor)
-  getDueMessages(limit: number = 10): QueueItem[] {
-    const now = new Date().toISOString();
-    const allItems = this.getAllQueueItems("pending");
-
-    return allItems.filter((item) => item.scheduled_time <= now).slice(0, limit);
   }
 }
 

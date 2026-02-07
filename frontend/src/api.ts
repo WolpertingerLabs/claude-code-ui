@@ -135,37 +135,13 @@ export async function uploadImages(chatId: string, images: File[]): Promise<Imag
   return res.json();
 }
 
-// Queue API functions
-export async function getQueueItems(status?: string, chatId?: string): Promise<QueueItem[]> {
+// Draft API functions
+export async function getDrafts(chatId?: string): Promise<QueueItem[]> {
   const params = new URLSearchParams();
-  if (status) params.append("status", status);
   if (chatId) params.append("chat_id", chatId);
 
   const res = await fetch(`${BASE}/queue?${params}`);
-  await assertOk(res, "Failed to load queue");
-  return res.json();
-}
-
-export async function scheduleMessage(
-  chatId: string | null,
-  message: string,
-  scheduledTime: string,
-  folder?: string,
-  defaultPermissions?: DefaultPermissions,
-): Promise<QueueItem> {
-  const res = await fetch(`${BASE}/queue`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      chat_id: chatId,
-      user_message: message,
-      scheduled_time: scheduledTime,
-      is_draft: false,
-      ...(folder && { folder }),
-      ...(defaultPermissions && { defaultPermissions }),
-    }),
-  });
-  await assertOk(res, "Failed to schedule message");
+  await assertOk(res, "Failed to load drafts");
   return res.json();
 }
 
@@ -176,7 +152,6 @@ export async function createDraft(chatId: string | null, message: string, folder
     body: JSON.stringify({
       chat_id: chatId,
       user_message: message,
-      is_draft: true,
       ...(folder && { folder }),
       ...(defaultPermissions && { defaultPermissions }),
     }),
@@ -185,23 +160,14 @@ export async function createDraft(chatId: string | null, message: string, folder
   return res.json();
 }
 
-export async function convertDraftToScheduled(id: string, scheduledTime: string): Promise<void> {
-  const res = await fetch(`${BASE}/queue/${id}/convert-to-scheduled`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ scheduled_time: scheduledTime }),
-  });
-  await assertOk(res, "Failed to convert draft to scheduled");
-}
-
-export async function cancelQueueItem(id: string): Promise<void> {
+export async function deleteDraft(id: string): Promise<void> {
   const res = await fetch(`${BASE}/queue/${id}`, { method: "DELETE" });
-  await assertOk(res, "Failed to cancel queue item");
+  await assertOk(res, "Failed to delete draft");
 }
 
-export async function executeNow(id: string): Promise<void> {
+export async function executeDraft(id: string): Promise<void> {
   const res = await fetch(`${BASE}/queue/${id}/execute-now`, { method: "POST" });
-  await assertOk(res, "Failed to execute queue item");
+  await assertOk(res, "Failed to execute draft");
 }
 
 export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slashCommands: string[]; plugins: Plugin[] }> {
