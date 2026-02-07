@@ -19,7 +19,6 @@ function logDebug(message: string, data?: any) {
     ? `[${timestamp}] ${message}\n${JSON.stringify(data, null, 2)}\n\n`
     : `[${timestamp}] ${message}\n\n`;
 
-  console.log(`[SLASH-DEBUG] ${message}`, data || '');
   appendFileSync(debugLogFile, logEntry);
 }
 
@@ -360,14 +359,6 @@ export async function sendMessage(chatId: string, prompt: string | any, imageMet
 
       for await (const message of conversation) {
         if (abortController.signal.aborted) break;
-
-        // Debug: Log message structure to understand what we receive
-        logDebug('Received message from Claude SDK', {
-          keys: Object.keys(message),
-          type: (message as any).type,
-          hasSlashCommands: 'slash_commands' in message,
-          fullMessage: message
-        });
 
         // Capture slash commands from system initialization message
         if ('slash_commands' in message && message.slash_commands) {
@@ -753,14 +744,6 @@ export async function sendSlashCommand(chatId: string, command: string, activePl
 
       for await (const message of conversation) {
         if (abortController.signal.aborted) break;
-
-        // Debug: Log message structure to understand what we receive
-        logDebug('Received message from Claude SDK', {
-          keys: Object.keys(message),
-          type: (message as any).type,
-          hasSlashCommands: 'slash_commands' in message,
-          fullMessage: message
-        });
 
         // Capture slash commands from system initialization message
         if ('slash_commands' in message && message.slash_commands) {
