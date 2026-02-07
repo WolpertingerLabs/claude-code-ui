@@ -1,11 +1,11 @@
-import { v4 as uuid } from 'uuid';
-import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync, statSync } from 'fs';
-import { join, dirname, extname } from 'path';
-import { fileURLToPath } from 'url';
-import crypto from 'crypto';
+import { v4 as uuid } from "uuid";
+import { writeFileSync, mkdirSync, existsSync, readFileSync, unlinkSync, readdirSync, statSync } from "fs";
+import { join, dirname, extname } from "path";
+import { fileURLToPath } from "url";
+import crypto from "crypto";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const IMAGES_DIR = join(__dirname, '..', '..', 'data', 'images');
+const IMAGES_DIR = join(__dirname, "..", "..", "data", "images");
 
 // Ensure images directory exists
 mkdirSync(IMAGES_DIR, { recursive: true });
@@ -28,13 +28,14 @@ export interface ImageUploadResult {
   error?: string;
 }
 
-const ALLOWED_MIME_TYPES = [
-  'image/png',
-  'image/jpeg',
-  'image/jpg',
-  'image/gif',
-  'image/webp'
-];
+// UUID v4 format: 8-4-4-4-12 hex characters
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function isValidImageId(imageId: string): boolean {
+  return UUID_REGEX.test(imageId);
+}
+
+const ALLOWED_MIME_TYPES = ["image/png", "image/jpeg", "image/jpg", "image/gif", "image/webp"];
 
 const MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
 
@@ -42,17 +43,13 @@ export class ImageStorageService {
   /**
    * Store an uploaded image file
    */
-  static async storeImage(
-    buffer: Buffer,
-    originalName: string,
-    mimeType: string
-  ): Promise<ImageUploadResult> {
+  static async storeImage(buffer: Buffer, originalName: string, mimeType: string): Promise<ImageUploadResult> {
     try {
       // Validate file type
       if (!ALLOWED_MIME_TYPES.includes(mimeType)) {
         return {
           success: false,
-          error: `Invalid file type: ${mimeType}. Allowed types: ${ALLOWED_MIME_TYPES.join(', ')}`
+          error: `Invalid file type: ${mimeType}. Allowed types: ${ALLOWED_MIME_TYPES.join(", ")}`,
         };
       }
 
@@ -60,12 +57,12 @@ export class ImageStorageService {
       if (buffer.length > MAX_FILE_SIZE) {
         return {
           success: false,
-          error: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`
+          error: `File size exceeds ${MAX_FILE_SIZE / 1024 / 1024}MB limit`,
         };
       }
 
       // Generate SHA256 hash for deduplication
-      const sha256 = crypto.createHash('sha256').update(buffer).digest('hex');
+      const sha256 = crypto.createHash("sha256").update(buffer).digest("hex");
 
       // Generate unique filename
       const id = uuid();
@@ -88,18 +85,17 @@ export class ImageStorageService {
         size: buffer.length,
         sha256,
         uploadedAt: new Date().toISOString(),
-        storagePath
+        storagePath,
       };
 
       return {
         success: true,
-        image
+        image,
       };
-
     } catch (error) {
       return {
         success: false,
-        error: `Failed to store image: ${error instanceof Error ? error.message : 'Unknown error'}`
+        error: `Failed to store image: ${error instanceof Error ? error.message : "Unknown error"}`,
       };
     }
   }
@@ -109,17 +105,15 @@ export class ImageStorageService {
    */
   static getImage(imageId: string): { buffer: Buffer; image: StoredImage } | null {
     try {
-      // Find the image file - for now we'll scan the directory
-      // In a production app, you'd want to store metadata in a database
-      console.log(`[DEBUG] getImage called with imageId: ${imageId}`);
-      console.log(`[DEBUG] Looking in directory: ${IMAGES_DIR}`);
+      // Validate image ID is a proper UUID to prevent directory traversal
+      if (!isValidImageId(imageId)) {
+        return null;
+      }
+
       const files = readdirSync(IMAGES_DIR);
-      console.log(`[DEBUG] All files in directory:`, files);
       const imageFile = files.find((f: string) => f.startsWith(imageId));
-      console.log(`[DEBUG] Found matching file:`, imageFile);
 
       if (!imageFile) {
-        console.log(`[DEBUG] No file found starting with ${imageId}`);
         return null;
       }
 
@@ -137,9 +131,9 @@ export class ImageStorageService {
         storedAs: imageFile,
         mimeType: this.getMimeTypeFromExtension(extname(imageFile)),
         size: stats.size,
-        sha256: crypto.createHash('sha256').update(buffer).digest('hex'),
+        sha256: crypto.createHash("sha256").update(buffer).digest("hex"),
         uploadedAt: stats.birthtime.toISOString(),
-        storagePath: imagePath
+        storagePath: imagePath,
       };
 
       return { buffer, image };
@@ -153,6 +147,11 @@ export class ImageStorageService {
    */
   static deleteImage(imageId: string): boolean {
     try {
+      // Validate image ID is a proper UUID to prevent directory traversal
+      if (!isValidImageId(imageId)) {
+        return false;
+      }
+
       const files = readdirSync(IMAGES_DIR);
       const imageFile = files.find((f: string) => f.startsWith(imageId));
 
@@ -174,13 +173,13 @@ export class ImageStorageService {
    */
   private static getExtensionFromMimeType(mimeType: string): string {
     const mapping: Record<string, string> = {
-      'image/png': '.png',
-      'image/jpeg': '.jpg',
-      'image/jpg': '.jpg',
-      'image/gif': '.gif',
-      'image/webp': '.webp'
+      "image/png": ".png",
+      "image/jpeg": ".jpg",
+      "image/jpg": ".jpg",
+      "image/gif": ".gif",
+      "image/webp": ".webp",
     };
-    return mapping[mimeType] || '.bin';
+    return mapping[mimeType] || ".bin";
   }
 
   /**
@@ -188,13 +187,13 @@ export class ImageStorageService {
    */
   private static getMimeTypeFromExtension(ext: string): string {
     const mapping: Record<string, string> = {
-      '.png': 'image/png',
-      '.jpg': 'image/jpeg',
-      '.jpeg': 'image/jpeg',
-      '.gif': 'image/gif',
-      '.webp': 'image/webp'
+      ".png": "image/png",
+      ".jpg": "image/jpeg",
+      ".jpeg": "image/jpeg",
+      ".gif": "image/gif",
+      ".webp": "image/webp",
     };
-    return mapping[ext.toLowerCase()] || 'application/octet-stream';
+    return mapping[ext.toLowerCase()] || "application/octet-stream";
   }
 
   /**

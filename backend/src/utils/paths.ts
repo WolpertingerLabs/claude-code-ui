@@ -1,36 +1,54 @@
-import { existsSync } from 'fs';
-import { join } from 'path';
-import { homedir } from 'os';
+import { statSync } from "fs";
+import { join } from "path";
+import { homedir } from "os";
 
-export const CLAUDE_PROJECTS_DIR = join(homedir(), '.claude', 'projects');
+export const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+
+function isDirectory(p: string): boolean {
+  try {
+    return statSync(p).isDirectory();
+  } catch {
+    return false;
+  }
+}
 
 /**
  * Convert a project directory name back to a folder path.
- * The SDK encodes paths by replacing / with -, so "-home-exedev-my-app"
- * is ambiguous (could be /home/exedev/my-app or /home/exedev/my/app).
- * We try all possible splits and return the first path that exists on disk.
+ * The SDK encodes paths by replacing / with -, so "-home-cybil-my-app"
+ * is ambiguous (could be /home/cybil/my-app or /home/cybil/my/app).
+ *
+ * Uses a greedy left-to-right algorithm: at each dash boundary, check if
+ * treating it as a "/" yields an existing directory. If so, commit the split.
+ * Otherwise, keep it as a "-" in the current segment. This is O(n) filesystem
+ * checks instead of the previous O(2^n) brute-force approach.
  */
 export function projectDirToFolder(dirName: string): string {
   // Strip leading dash (represents the root /)
-  const parts = dirName.slice(1).split('-');
+  const parts = dirName.slice(1).split("-");
+  if (parts.length === 0) return "/";
 
-  // Try all possible ways to rejoin the parts with / or -
-  function resolve(index: number, current: string): string | null {
-    if (index === parts.length) {
-      return existsSync(current) ? current : null;
+  // Build the path greedily from left to right
+  const resolvedSegments: string[] = [];
+  let currentSegment = parts[0];
+
+  for (let i = 1; i < parts.length; i++) {
+    // Try treating the dash as a "/" — does the path so far exist as a directory?
+    const candidatePath = "/" + [...resolvedSegments, currentSegment].join("/");
+    if (isDirectory(candidatePath)) {
+      // Commit this segment and start a new one
+      resolvedSegments.push(currentSegment);
+      currentSegment = parts[i];
+    } else {
+      // Keep the dash as a literal "-" in the current segment
+      currentSegment += "-" + parts[i];
     }
-    // Try joining with / first (prefer deeper paths)
-    const withSlash = resolve(index + 1, current + '/' + parts[index]);
-    if (withSlash) return withSlash;
-    // Then try joining with - (keeps it as part of the folder name)
-    const withDash = resolve(index + 1, current + '-' + parts[index]);
-    if (withDash) return withDash;
-    return null;
   }
 
-  const resolved = resolve(1, '/' + parts[0]);
-  if (resolved) return resolved;
+  // Append the final segment (doesn't need to be a directory itself)
+  resolvedSegments.push(currentSegment);
 
-  // Fallback: naive replacement
-  return '/' + parts.join('/');
+  const resolved = "/" + resolvedSegments.join("/");
+
+  // Verify the final path exists; if not, return it anyway (best effort)
+  return resolved;
 }

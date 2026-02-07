@@ -230,7 +230,7 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ### 8.1 Backend Performance
 
-- [ ] Replace blocking `execSync` in `routes/chats.ts:70` with async `execFile` or `readdir`
+- [ ] Replace blocking `execSync` in `routes/chats.ts:70` with async `execFile` or `readdir` ⏳ **REVIEW LATER**
 - [ ] Fix exponential `projectDirToFolder()` in `utils/paths.ts` (see Phase 5.9)
 - [ ] Add in-memory cache with TTL to `ChatFileService.getAllChats()` (invalidate on write)
 - [ ] Replace `readdirSync` + `find()` in `image-storage.ts:getImage()` with a lookup map
@@ -262,15 +262,15 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ### 9.2 Important
 
-- [ ] Add `secure: true` flag to session cookie in production (`backend/src/auth.ts`)
-- [ ] Sanitize image IDs before filesystem lookup to prevent directory traversal (`image-storage.ts`)
+- [ ] Add `secure: true` flag to session cookie in production (`backend/src/auth.ts`) ⏳ **REVIEW LATER**
+- [x] ~~Sanitize image IDs before filesystem lookup to prevent directory traversal (`image-storage.ts`)~~ (FIXED -- added UUID format validation in `getImage()` and `deleteImage()`; also removed debug logging)
 - [ ] Remove `storagePath` from API responses in `image-storage.ts` (leaks server paths)
 - [ ] Fix `sanitizeBranchForPath()` (`utils/git.ts:229-231`) -- handle `\`, `?`, `*`, `:` characters and prevent collision between `feature/foo` and `feature-foo` (NEW)
 - [ ] Fix `ensureWorktree` TOCTOU race condition (`utils/git.ts:252-254`) -- make check+create atomic (NEW)
 
 ### 9.3 Maintenance
 
-- [ ] Add periodic cleanup or TTL to the rate limit `Map` in `auth.ts`
+- [ ] Add periodic cleanup or TTL to the rate limit `Map` in `auth.ts` ⏳ **REVIEW LATER**
 - [ ] Set explicit body size limit with `express.json({ limit: '1mb' })` in `index.ts`
 - [ ] Add JSON schema validation for `metadata` fields parsed via `JSON.parse()`
 
