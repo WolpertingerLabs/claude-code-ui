@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 import { useParams, useNavigate, useSearchParams, useLocation } from "react-router-dom";
-import { RotateCw, CheckSquare, Square, Slash, ArrowLeft, ChevronDown, ArrowDown, MessageSquare, GitBranch } from "lucide-react";
+import { RotateCw, CheckSquare, Square, Slash, ArrowLeft, ArrowDown, MessageSquare, GitBranch } from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import {
   getChat,
@@ -9,7 +9,6 @@ import {
   respondToChat,
   getSessionStatus,
   uploadImages,
-  getSlashCommands,
   getSlashCommandsAndPlugins,
   getNewChatInfo,
   type Chat as ChatType,

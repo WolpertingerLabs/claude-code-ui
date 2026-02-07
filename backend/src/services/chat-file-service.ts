@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync, readdirSync, unlinkSync, existsSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { v4 as uuid } from 'uuid';
+import { readFileSync, writeFileSync, readdirSync, unlinkSync, existsSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { v4 as uuid } from "uuid";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const chatsDir = join(__dirname, '..', '..', 'data', 'chats');
+const chatsDir = join(__dirname, "..", "..", "data", "chats");
 
 // Ensure chats directory exists
 if (!existsSync(chatsDir)) {
@@ -22,16 +22,15 @@ export interface Chat {
 }
 
 export class ChatFileService {
-
   // Get all chat files
   getAllChats(limit?: number, offset?: number): Chat[] {
     try {
-      const files = readdirSync(chatsDir).filter(file => file.endsWith('.json'));
+      const files = readdirSync(chatsDir).filter((file) => file.endsWith(".json"));
       const chats: Chat[] = [];
 
       for (const file of files) {
         try {
-          const content = readFileSync(join(chatsDir, file), 'utf8');
+          const content = readFileSync(join(chatsDir, file), "utf8");
           const chat: Chat = JSON.parse(content);
           chats.push(chat);
         } catch (error) {
@@ -47,7 +46,7 @@ export class ChatFileService {
       const end = limit ? start + limit : undefined;
       return chats.slice(start, end);
     } catch (error) {
-      console.error('Error reading chats directory:', error);
+      console.error("Error reading chats directory:", error);
       return [];
     }
   }
@@ -58,7 +57,7 @@ export class ChatFileService {
     const sessionFilepath = join(chatsDir, `${id}.json`);
     if (existsSync(sessionFilepath)) {
       try {
-        const content = readFileSync(sessionFilepath, 'utf8');
+        const content = readFileSync(sessionFilepath, "utf8");
         return JSON.parse(content);
       } catch (error) {
         console.error(`Error reading chat file for session ${id}:`, error);
@@ -67,10 +66,10 @@ export class ChatFileService {
 
     // If not found by session_id, search all files for matching chat id
     try {
-      const files = readdirSync(chatsDir).filter(file => file.endsWith('.json'));
+      const files = readdirSync(chatsDir).filter((file) => file.endsWith(".json"));
       for (const file of files) {
         try {
-          const content = readFileSync(join(chatsDir, file), 'utf8');
+          const content = readFileSync(join(chatsDir, file), "utf8");
           const chat: Chat = JSON.parse(content);
           if (chat.id === id) {
             return chat;
@@ -80,14 +79,14 @@ export class ChatFileService {
         }
       }
     } catch (error) {
-      console.error('Error searching for chat:', error);
+      console.error("Error searching for chat:", error);
     }
 
     return null;
   }
 
   // Create a new chat (requires session_id)
-  createChat(folder: string, sessionId: string, metadata: string = '{}'): Chat {
+  createChat(folder: string, sessionId: string, metadata: string = "{}"): Chat {
     const id = uuid();
     const now = new Date().toISOString();
 
@@ -98,7 +97,7 @@ export class ChatFileService {
       session_log_path: null,
       metadata,
       created_at: now,
-      updated_at: now
+      updated_at: now,
     };
 
     this.saveChat(chat);
@@ -116,7 +115,7 @@ export class ChatFileService {
     const updatedChat = {
       ...chat,
       ...updates,
-      updated_at: new Date().toISOString()
+      updated_at: new Date().toISOString(),
     };
 
     // If session_id changed, we need to rename the file
@@ -139,7 +138,7 @@ export class ChatFileService {
         ...existingChat,
         ...updates,
         session_id: sessionId || existingChat.session_id,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       };
 
       // If session_id changed, we need to rename the file
@@ -157,9 +156,9 @@ export class ChatFileService {
         folder,
         session_id: sessionId,
         session_log_path: null,
-        metadata: updates.metadata || '{}',
+        metadata: updates.metadata || "{}",
         created_at: now,
-        updated_at: now
+        updated_at: now,
       };
 
       this.saveChat(newChat);
@@ -188,17 +187,6 @@ export class ChatFileService {
   private saveChat(chat: Chat): void {
     const filepath = join(chatsDir, `${chat.session_id}.json`);
     writeFileSync(filepath, JSON.stringify(chat, null, 2));
-  }
-
-  // Get total count of chats
-  getTotalChats(): number {
-    try {
-      const files = readdirSync(chatsDir).filter(file => file.endsWith('.json'));
-      return files.length;
-    } catch (error) {
-      console.error('Error counting chat files:', error);
-      return 0;
-    }
   }
 }
 

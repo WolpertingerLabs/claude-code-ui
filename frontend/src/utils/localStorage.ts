@@ -1,7 +1,7 @@
-import type { DefaultPermissions } from '../api';
+import type { DefaultPermissions } from "../api";
 
 const STORAGE_KEYS = {
-  SETTINGS: 'claude-code-settings',
+  SETTINGS: "claude-code-settings",
 } as const;
 
 interface RecentDirectory {
@@ -15,10 +15,10 @@ interface LocalStorageData {
 }
 
 const DEFAULT_PERMISSIONS: DefaultPermissions = {
-  fileRead: 'ask',
-  fileWrite: 'ask',
-  codeExecution: 'ask',
-  webAccess: 'ask',
+  fileRead: "ask",
+  fileWrite: "ask",
+  codeExecution: "ask",
+  webAccess: "ask",
 };
 
 /**
@@ -38,8 +38,8 @@ function migratePermissions(permissions: any): DefaultPermissions {
     return {
       fileRead: permissions.fileOperations,
       fileWrite: permissions.fileOperations,
-      codeExecution: permissions.codeExecution || 'ask',
-      webAccess: permissions.webAccess || 'ask',
+      codeExecution: permissions.codeExecution || "ask",
+      webAccess: permissions.webAccess || "ask",
     };
   }
 
@@ -88,13 +88,10 @@ export function addRecentDirectory(path: string): void {
   const existing = data.recentDirectories || [];
 
   // Remove existing entry for this path
-  const filtered = existing.filter(dir => dir.path !== path);
+  const filtered = existing.filter((dir) => dir.path !== path);
 
   // Add to front with current timestamp
-  const updated = [
-    { path, lastUsed: new Date().toISOString() },
-    ...filtered
-  ].slice(0, 5); // Keep only top 5
+  const updated = [{ path, lastUsed: new Date().toISOString() }, ...filtered].slice(0, 5); // Keep only top 5
 
   data.recentDirectories = updated;
   setStorageData(data);
@@ -104,13 +101,7 @@ export function removeRecentDirectory(path: string): void {
   const data = getStorageData();
   const existing = data.recentDirectories || [];
 
-  data.recentDirectories = existing.filter(dir => dir.path !== path);
-  setStorageData(data);
-}
-
-export function clearAllRecentDirectories(): void {
-  const data = getStorageData();
-  data.recentDirectories = [];
+  data.recentDirectories = existing.filter((dir) => dir.path !== path);
   setStorageData(data);
 }
 
@@ -123,9 +114,9 @@ export function initializeSuggestedDirectories(chatDirectories: string[]): void 
 
     // Take first three unique directories
     const uniqueDirs = [...new Set(chatDirectories)];
-    const suggestedDirs = uniqueDirs.slice(0, 3).map(path => ({
+    const suggestedDirs = uniqueDirs.slice(0, 3).map((path) => ({
       path,
-      lastUsed: new Date().toISOString()
+      lastUsed: new Date().toISOString(),
     }));
 
     data.recentDirectories = suggestedDirs;

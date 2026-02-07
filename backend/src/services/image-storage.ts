@@ -195,11 +195,4 @@ export class ImageStorageService {
     };
     return mapping[ext.toLowerCase()] || "application/octet-stream";
   }
-
-  /**
-   * Get images directory path
-   */
-  static getImagesDir(): string {
-    return IMAGES_DIR;
-  }
 }

@@ -74,15 +74,6 @@ export interface DefaultPermissions {
   webAccess: PermissionLevel;
 }
 
-export async function createChat(folder: string, sessionId: string, defaultPermissions?: DefaultPermissions): Promise<Chat> {
-  const res = await fetch(`${BASE}/chats`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ folder, sessionId, defaultPermissions }),
-  });
-  return res.json();
-}
-
 export interface NewChatInfo {
   folder: string;
   is_git_repo: boolean;
@@ -118,10 +109,6 @@ export async function getPending(id: string): Promise<any | null> {
   const res = await fetch(`${BASE}/chats/${id}/pending`);
   const data = await res.json();
   return data.pending;
-}
-
-export async function stopChat(id: string): Promise<void> {
-  await fetch(`${BASE}/chats/${id}/stop`, { method: "POST" });
 }
 
 export async function respondToChat(
@@ -181,10 +168,6 @@ export async function uploadImages(chatId: string, images: File[]): Promise<Imag
   });
 
   return res.json();
-}
-
-export function getImageUrl(imageId: string): string {
-  return `${BASE}/images/${imageId}`;
 }
 
 // Queue API functions
@@ -262,17 +245,6 @@ export async function cancelQueueItem(id: string): Promise<void> {
 
 export async function executeNow(id: string): Promise<void> {
   await fetch(`${BASE}/queue/${id}/execute-now`, { method: "POST" });
-}
-
-export async function addToBacklog(chatId: string | null, message: string, folder?: string, defaultPermissions?: DefaultPermissions): Promise<QueueItem> {
-  // Create as draft instead of immediate execution
-  return createDraft(chatId, message, folder, defaultPermissions);
-}
-
-export async function getSlashCommands(chatId: string): Promise<string[]> {
-  const res = await fetch(`${BASE}/chats/${chatId}/slash-commands`);
-  const data = await res.json();
-  return data.slashCommands || [];
 }
 
 export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slashCommands: string[]; plugins: Plugin[] }> {

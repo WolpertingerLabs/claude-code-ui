@@ -18,6 +18,11 @@
   --assistant-bg: #161b22;
   --code-bg: #0d1117;
   --danger: #f85149;
+  --error: #f85149;
+  --bg-secondary: #1c2128;
+  --text-secondary: #8b949e;
+  --border-light: #21262d;
+  --font-mono: "SF Mono", Monaco, "Cascadia Code", "Roboto Mono", Consolas, "Courier New", monospace;
   --radius: 12px;
   --safe-bottom: env(safe-area-inset-bottom, 0px);
 
@@ -43,6 +48,10 @@
     --assistant-bg: #f8fafc;
     --code-bg: #f1f5f9;
     --danger: #ef4444;
+    --error: #cf222e;
+    --bg-secondary: #f0f4f8;
+    --text-secondary: #64748b;
+    --border-light: #e2e8f0;
 
     /* Built-in command colors - optimized for light mode */
     --builtin-user-bg: #dbeafe;
@@ -135,27 +144,6 @@ a {
 
 .message-markdown em {
   font-style: italic;
-}
-
-/* Hide GitHub light theme in dark mode, show GitHub dark theme */
-@media (prefers-color-scheme: dark) {
-  /* Hide light theme styles */
-  .hljs {
-    /* GitHub dark theme colors will be applied by the imported CSS */
-    background: var(--code-bg) !important;
-    border-radius: 6px !important;
-    padding: 12px !important;
-  }
-}
-
-/* Hide GitHub dark theme in light mode, show GitHub light theme */
-@media (prefers-color-scheme: light) {
-  /* Ensure light theme is properly applied */
-  .hljs {
-    background: var(--code-bg) !important;
-    border-radius: 6px !important;
-    padding: 12px !important;
-  }
 }
 
 /* Base code block styling for all themes */

@@ -1,9 +1,9 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
-import { getPluginsForDirectory, Plugin, pluginToSlashCommands } from './plugins.js';
+import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
+import { join } from "path";
+import { getPluginsForDirectory, Plugin, pluginToSlashCommands } from "./plugins.js";
 
-const DATA_DIR = join(process.cwd(), 'data');
-const SLASH_COMMANDS_FILE = join(DATA_DIR, 'slash-commands.json');
+const DATA_DIR = join(process.cwd(), "data");
+const SLASH_COMMANDS_FILE = join(DATA_DIR, "slash-commands.json");
 
 interface SlashCommandsData {
   [directory: string]: string[];
@@ -34,10 +34,10 @@ function loadSlashCommandsData(): SlashCommandsData {
   }
 
   try {
-    const data = readFileSync(SLASH_COMMANDS_FILE, 'utf-8');
+    const data = readFileSync(SLASH_COMMANDS_FILE, "utf-8");
     return JSON.parse(data);
   } catch (error) {
-    console.warn('Failed to load slash commands data:', error);
+    console.warn("Failed to load slash commands data:", error);
     return {};
   }
 }
@@ -51,7 +51,7 @@ function saveSlashCommandsData(data: SlashCommandsData): void {
   try {
     writeFileSync(SLASH_COMMANDS_FILE, JSON.stringify(data, null, 2));
   } catch (error) {
-    console.error('Failed to save slash commands data:', error);
+    console.error("Failed to save slash commands data:", error);
     throw error;
   }
 }
@@ -74,23 +74,6 @@ export function setSlashCommandsForDirectory(directory: string, commands: string
 }
 
 /**
- * Get all directories that have slash commands
- */
-export function getAllDirectoriesWithSlashCommands(): string[] {
-  const data = loadSlashCommandsData();
-  return Object.keys(data);
-}
-
-/**
- * Remove slash commands for a directory
- */
-export function removeSlashCommandsForDirectory(directory: string): void {
-  const data = loadSlashCommandsData();
-  delete data[directory];
-  saveSlashCommandsData(data);
-}
-
-/**
  * Get both slash commands and plugins for a directory
  */
 export function getCommandsAndPluginsForDirectory(directory: string): DirectoryCommandsAndPlugins {
@@ -99,7 +82,7 @@ export function getCommandsAndPluginsForDirectory(directory: string): DirectoryC
 
   return {
     slashCommands,
-    plugins
+    plugins,
   };
 }
 

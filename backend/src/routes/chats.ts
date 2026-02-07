@@ -3,7 +3,7 @@ import { readFileSync, existsSync, readdirSync, statSync } from "fs";
 import { execSync } from "child_process";
 import { join } from "path";
 import { chatFileService } from "../services/chat-file-service.js";
-import { getSlashCommandsForDirectory, getCommandsAndPluginsForDirectory, getAllCommandsForDirectory } from "../services/slashCommands.js";
+import { getCommandsAndPluginsForDirectory, getAllCommandsForDirectory } from "../services/slashCommands.js";
 import { getGitInfo } from "../utils/git.js";
 import { CLAUDE_PROJECTS_DIR, projectDirToFolder } from "../utils/paths.js";
 

@@ -1,10 +1,10 @@
-import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from 'fs';
-import { join, dirname } from 'path';
-import { fileURLToPath } from 'url';
+import { readFileSync, writeFileSync, existsSync, statSync, mkdirSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const dataDir = join(__dirname, '..', '..', '..', 'data');
-const sessionsFilePath = join(dataDir, 'sessions.json');
+const dataDir = join(__dirname, "..", "..", "..", "data");
+const sessionsFilePath = join(dataDir, "sessions.json");
 
 interface SessionData {
   expires_at: number;
@@ -32,8 +32,8 @@ function loadSessions(): SessionsFile {
       sessions: {},
       metadata: {
         last_cleanup: Date.now(),
-        version: 1
-      }
+        version: 1,
+      },
     };
     saveSessions(initialData);
     return initialData;
@@ -43,7 +43,7 @@ function loadSessions(): SessionsFile {
   const currentModified = stats.mtime.getTime();
 
   if (!sessionsCache || currentModified !== lastModified) {
-    const data = readFileSync(sessionsFilePath, 'utf8');
+    const data = readFileSync(sessionsFilePath, "utf8");
     sessionsCache = JSON.parse(data);
     lastModified = currentModified;
   }
@@ -67,7 +67,7 @@ export function createSession(token: string, expiresAt: number, ip?: string): vo
   data.sessions[token] = {
     expires_at: expiresAt,
     created_at: Date.now(),
-    ip
+    ip,
   };
   saveSessions(data);
 }
@@ -96,9 +96,4 @@ export function cleanupExpiredSessions(): number {
   }
 
   return removedCount;
-}
-
-export function getAllSessions(): Record<string, SessionData> {
-  const data = loadSessions();
-  return { ...data.sessions };
 }

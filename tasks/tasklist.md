@@ -10,40 +10,41 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ### 1.1 Delete Unused Files
 
-- [ ] Delete `frontend/src/hooks/useStream.ts` (entirely unused)
-- [ ] Delete `frontend/src/components/ScheduleModal.tsx` (entirely unused)
+- [x] ~~Delete `frontend/src/hooks/useStream.ts` (entirely unused)~~ (FIXED)
+- ~~[ ] Delete `frontend/src/components/ScheduleModal.tsx` (entirely unused)~~ (NOT DEAD CODE -- used in Queue.tsx)
 
 ### 1.2 Remove Unused Backend Exports
 
-- [ ] Remove `getAllSessions()` from `backend/src/services/sessions.ts`
-- [ ] Remove `getTotalChats()` from `backend/src/services/chat-file-service.ts`
-- [ ] Remove `getImagesDir()` from `backend/src/services/image-storage.ts`
-- [ ] Remove `getAllDirectoriesWithSlashCommands()` from `backend/src/services/slashCommands.ts`
-- [ ] Remove `removeSlashCommandsForDirectory()` from `backend/src/services/slashCommands.ts`
+- [x] ~~Remove `getAllSessions()` from `backend/src/services/sessions.ts`~~ (FIXED)
+- [x] ~~Remove `getTotalChats()` from `backend/src/services/chat-file-service.ts`~~ (FIXED)
+- [x] ~~Remove `getImagesDir()` from `backend/src/services/image-storage.ts`~~ (FIXED)
+- [x] ~~Remove `getAllDirectoriesWithSlashCommands()` from `backend/src/services/slashCommands.ts`~~ (FIXED)
+- [x] ~~Remove `removeSlashCommandsForDirectory()` from `backend/src/services/slashCommands.ts`~~ (FIXED)
 
 ### 1.3 Remove Unused Frontend Functions
 
-- [ ] Remove `stopChat()` from `frontend/src/api.ts`
-- [ ] Remove `createChat()` from `frontend/src/api.ts`
-- [ ] Remove `getImageUrl()` from `frontend/src/api.ts`
-- [ ] Remove `getSlashCommands()` from `frontend/src/api.ts` and its import in Chat.tsx
-- [ ] Remove `clearFolderCache()` from `frontend/src/api/folders.ts`
-- [ ] Remove `clearAllRecentDirectories()` from `frontend/src/utils/localStorage.ts`
-- [ ] Remove `addToBacklog()` wrapper from `frontend/src/api.ts` (callers should use `createDraft()` directly)
+- [x] ~~Remove `stopChat()` from `frontend/src/api.ts`~~ (FIXED)
+- [x] ~~Remove `createChat()` from `frontend/src/api.ts`~~ (FIXED)
+- [x] ~~Remove `getImageUrl()` from `frontend/src/api.ts`~~ (FIXED)
+- [x] ~~Remove `getSlashCommands()` from `frontend/src/api.ts` and its import in Chat.tsx~~ (FIXED)
+- [x] ~~Remove `clearFolderCache()` from `frontend/src/api/folders.ts`~~ (FIXED)
+- [x] ~~Remove `clearAllRecentDirectories()` from `frontend/src/utils/localStorage.ts`~~ (FIXED)
+- [x] ~~Remove `addToBacklog()` wrapper from `frontend/src/api.ts` (callers should use `createDraft()` directly)~~ (FIXED -- DraftModal.tsx updated to import `createDraft` directly)
 
 ### 1.4 Remove Unused Imports
 
-- [ ] Remove unused `ChevronDown` import from `frontend/src/pages/Chat.tsx`
-- [ ] Remove unused `useMemo` import from `frontend/src/pages/ChatList.tsx`
-- [ ] Remove unused `ChatListResponse` type import from `frontend/src/pages/ChatList.tsx`
-- [ ] Remove unused `FolderOpen`, `File` imports from `frontend/src/components/FolderBrowser.tsx`
-- [ ] Remove unused local `StoredImage` interface from `frontend/src/components/ImageUpload.tsx`
+- [x] ~~Remove unused `ChevronDown` import from `frontend/src/pages/Chat.tsx`~~ (FIXED)
+- [x] ~~Remove unused `useMemo` import from `frontend/src/pages/ChatList.tsx`~~ (FIXED)
+- [x] ~~Remove unused `ChatListResponse` type import from `frontend/src/pages/ChatList.tsx`~~ (FIXED)
+- [x] ~~Remove unused `FolderOpen`, `File` imports from `frontend/src/components/FolderBrowser.tsx`~~ (FIXED)
+- [x] ~~Remove unused local `StoredImage` interface from `frontend/src/components/ImageUpload.tsx`~~ (FIXED)
+- [x] ~~Remove unused `getSlashCommandsForDirectory` import from `backend/src/routes/chats.ts`~~ (FIXED)
 
 ### 1.5 Remove Debug Logging from Production
 
 - [ ] Remove or gate behind `NODE_ENV` the `appendFileSync` debug logger in `backend/src/services/claude.ts:11-22`
 - [ ] Remove 8 `console.log('[DEBUG]...')` statements from `backend/src/routes/stream.ts` (lines 248, 252, 262, 266, 269, 275, 282, 287)
-- [ ] Remove 5 `console.log('[DEBUG]...')` statements from `backend/src/services/image-storage.ts` (including directory listing dump)
+- [x] ~~Remove 5 `console.log('[DEBUG]...')` statements from `backend/src/services/image-storage.ts` (including directory listing dump)~~ (FIXED in prior commit)
 
 ---
 
@@ -70,13 +71,13 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ## Phase 3: Define Missing CSS Variables (Low Risk)
 
-- [ ] Define `--bg-secondary` in `frontend/src/index.css` (affects **12 files** incl. BranchSelector.tsx)
-- [ ] Define `--font-mono` in `frontend/src/index.css`
-- [ ] Define `--error` in `frontend/src/index.css`
-- [ ] Define `--border-light` in `frontend/src/index.css`
-- [ ] Define `--text-secondary` in `frontend/src/index.css`
-- [ ] Define `--text-muted` in `frontend/src/index.css` (NEW -- used in 5 places in BranchSelector.tsx)
-- [ ] Remove duplicate `.hljs` media query rules in `index.css` (lines 136-154)
+- [x] ~~Define `--bg-secondary` in `frontend/src/index.css` (affects **12 files** incl. BranchSelector.tsx)~~ (FIXED -- dark: #1c2128, light: #f0f4f8)
+- [x] ~~Define `--font-mono` in `frontend/src/index.css`~~ (FIXED -- SF Mono, Monaco, Cascadia Code, Roboto Mono, Consolas, Courier New, monospace)
+- [x] ~~Define `--error` in `frontend/src/index.css`~~ (FIXED -- dark: #f85149, light: #cf222e)
+- [x] ~~Define `--border-light` in `frontend/src/index.css`~~ (FIXED -- dark: #21262d, light: #e2e8f0)
+- [x] ~~Define `--text-secondary` in `frontend/src/index.css`~~ (FIXED -- dark: #8b949e, light: #64748b)
+- [x] ~~Define `--text-muted` in `frontend/src/index.css`~~ (was already defined -- dark: #8b949e, light: #64748b)
+- [x] ~~Remove duplicate `.hljs` media query rules in `index.css` (lines 136-154)~~ (FIXED -- removed redundant dark/light media queries; base rule already uses CSS variables)
 
 ---
 
