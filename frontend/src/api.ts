@@ -13,6 +13,10 @@ import type {
   QueueItem,
   SessionStatus,
   BranchConfig,
+  FolderItem,
+  BrowseResult,
+  ValidateResult,
+  FolderSuggestion,
 } from "shared/types/index.js";
 
 export type {
@@ -30,9 +34,21 @@ export type {
   QueueItem,
   SessionStatus,
   BranchConfig,
+  FolderItem,
+  BrowseResult,
+  ValidateResult,
+  FolderSuggestion,
 };
 
 const BASE = "/api";
+
+/** Shared error handler: throws with the server's error message or a fallback. */
+async function assertOk(res: Response, fallback: string): Promise<void> {
+  if (!res.ok) {
+    const body = await res.json().catch(() => ({}));
+    throw new Error(body.error || fallback);
+  }
+}
 
 export async function listChats(limit?: number, offset?: number): Promise<ChatListResponse> {
   const params = new URLSearchParams();
@@ -40,6 +56,7 @@ export async function listChats(limit?: number, offset?: number): Promise<ChatLi
   if (offset !== undefined) params.append("offset", offset.toString());
 
   const res = await fetch(`${BASE}/chats${params.toString() ? `?${params}` : ""}`);
+  await assertOk(res, "Failed to list chats");
   return res.json();
 }
 
@@ -53,29 +70,30 @@ export interface NewChatInfo {
 
 export async function getNewChatInfo(folder: string): Promise<NewChatInfo> {
   const res = await fetch(`${BASE}/chats/new/info?folder=${encodeURIComponent(folder)}`);
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || "Failed to get chat info");
-  }
+  await assertOk(res, "Failed to get chat info");
   return res.json();
 }
 
 export async function deleteChat(id: string): Promise<void> {
-  await fetch(`${BASE}/chats/${id}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}/chats/${id}`, { method: "DELETE" });
+  await assertOk(res, "Failed to delete chat");
 }
 
 export async function getChat(id: string): Promise<Chat> {
   const res = await fetch(`${BASE}/chats/${id}`);
+  await assertOk(res, "Failed to get chat");
   return res.json();
 }
 
 export async function getMessages(id: string): Promise<ParsedMessage[]> {
   const res = await fetch(`${BASE}/chats/${id}/messages`);
+  await assertOk(res, "Failed to get messages");
   return res.json();
 }
 
 export async function getPending(id: string): Promise<any | null> {
   const res = await fetch(`${BASE}/chats/${id}/pending`);
+  await assertOk(res, "Failed to get pending action");
   const data = await res.json();
   return data.pending;
 }
@@ -99,6 +117,7 @@ export async function respondToChat(
 
 export async function getSessionStatus(id: string): Promise<SessionStatus> {
   const res = await fetch(`${BASE}/chats/${id}/status`, { credentials: "include" });
+  await assertOk(res, "Failed to get session status");
   return res.json();
 }
 
@@ -112,7 +131,7 @@ export async function uploadImages(chatId: string, images: File[]): Promise<Imag
     method: "POST",
     body: formData,
   });
-
+  await assertOk(res, "Failed to upload images");
   return res.json();
 }
 
@@ -123,6 +142,7 @@ export async function getQueueItems(status?: string, chatId?: string): Promise<Q
   if (chatId) params.append("chat_id", chatId);
 
   const res = await fetch(`${BASE}/queue?${params}`);
+  await assertOk(res, "Failed to load queue");
   return res.json();
 }
 
@@ -145,6 +165,7 @@ export async function scheduleMessage(
       ...(defaultPermissions && { defaultPermissions }),
     }),
   });
+  await assertOk(res, "Failed to schedule message");
   return res.json();
 }
 
@@ -160,27 +181,32 @@ export async function createDraft(chatId: string | null, message: string, folder
       ...(defaultPermissions && { defaultPermissions }),
     }),
   });
+  await assertOk(res, "Failed to save draft");
   return res.json();
 }
 
 export async function convertDraftToScheduled(id: string, scheduledTime: string): Promise<void> {
-  await fetch(`${BASE}/queue/${id}/convert-to-scheduled`, {
+  const res = await fetch(`${BASE}/queue/${id}/convert-to-scheduled`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ scheduled_time: scheduledTime }),
   });
+  await assertOk(res, "Failed to convert draft to scheduled");
 }
 
 export async function cancelQueueItem(id: string): Promise<void> {
-  await fetch(`${BASE}/queue/${id}`, { method: "DELETE" });
+  const res = await fetch(`${BASE}/queue/${id}`, { method: "DELETE" });
+  await assertOk(res, "Failed to cancel queue item");
 }
 
 export async function executeNow(id: string): Promise<void> {
-  await fetch(`${BASE}/queue/${id}/execute-now`, { method: "POST" });
+  const res = await fetch(`${BASE}/queue/${id}/execute-now`, { method: "POST" });
+  await assertOk(res, "Failed to execute queue item");
 }
 
 export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slashCommands: string[]; plugins: Plugin[] }> {
   const res = await fetch(`${BASE}/chats/${chatId}/slash-commands`);
+  await assertOk(res, "Failed to get slash commands");
   const data = await res.json();
   return {
     slashCommands: data.slashCommands || [],
@@ -191,18 +217,44 @@ export async function getSlashCommandsAndPlugins(chatId: string): Promise<{ slas
 // Branch / worktree configuration
 export async function getGitBranches(folder: string): Promise<{ branches: string[] }> {
   const res = await fetch(`${BASE}/git/branches?folder=${encodeURIComponent(folder)}`);
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || "Failed to list branches");
-  }
+  await assertOk(res, "Failed to list branches");
   return res.json();
 }
 
 export async function getGitDiff(folder: string): Promise<{ diff: string }> {
   const res = await fetch(`${BASE}/git/diff?folder=${encodeURIComponent(folder)}`);
-  if (!res.ok) {
-    const error = await res.json();
-    throw new Error(error.error || "Failed to get diff");
-  }
+  await assertOk(res, "Failed to get diff");
+  return res.json();
+}
+
+// Folder browsing API functions
+
+export interface SuggestionsResponse {
+  suggestions: FolderSuggestion[];
+}
+
+export async function browseDirectory(path: string, showHidden: boolean = false, limit: number = 500): Promise<BrowseResult> {
+  const params = new URLSearchParams({
+    path,
+    showHidden: showHidden.toString(),
+    limit: limit.toString(),
+  });
+
+  const res = await fetch(`${BASE}/folders/browse?${params}`);
+  await assertOk(res, "Failed to browse directory");
+  return res.json();
+}
+
+export async function validatePath(path: string): Promise<ValidateResult> {
+  const params = new URLSearchParams({ path });
+
+  const res = await fetch(`${BASE}/folders/validate?${params}`);
+  await assertOk(res, "Failed to validate path");
+  return res.json();
+}
+
+export async function getFolderSuggestions(): Promise<SuggestionsResponse> {
+  const res = await fetch(`${BASE}/folders/suggestions`);
+  await assertOk(res, "Failed to get folder suggestions");
   return res.json();
 }

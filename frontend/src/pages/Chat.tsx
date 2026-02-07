@@ -28,6 +28,7 @@ import SlashCommandsModal from "../components/SlashCommandsModal";
 import BranchSelector from "../components/BranchSelector";
 import GitDiffView from "../components/GitDiffView";
 import { addRecentDirectory } from "../utils/localStorage";
+import { getActivePlugins } from "../utils/plugins";
 
 interface ToolGroup {
   kind: "tool_group";
@@ -476,22 +477,13 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
   // Load active plugins from localStorage and listen for changes
   useEffect(() => {
-    const loadActivePlugins = () => {
-      try {
-        const active = localStorage.getItem("activePlugins");
-        setActivePluginIds(active ? JSON.parse(active) : []);
-      } catch {
-        setActivePluginIds([]);
-      }
-    };
+    const loadActive = () => setActivePluginIds(Array.from(getActivePlugins()));
 
-    loadActivePlugins();
+    loadActive();
 
     // Listen for storage changes (when SlashCommandsModal updates activePlugins)
     const handleStorageChange = (e: StorageEvent) => {
-      if (e.key === "activePlugins") {
-        loadActivePlugins();
-      }
+      if (e.key === "activePlugins") loadActive();
     };
 
     window.addEventListener("storage", handleStorageChange);

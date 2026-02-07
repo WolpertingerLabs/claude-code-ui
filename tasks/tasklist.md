@@ -1,6 +1,6 @@
 # Cleanup Task List
 
-> **Last updated:** Post-commit `478305b` (refactor: create shared types package, deduplicate backend utils, and fix quick wins)
+> **Last updated:** Post Phase 5+6 deduplication (backend + frontend dedup, SSE helpers, image metadata consolidation, shared ModalOverlay, standardized API error handling)
 
 Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
@@ -106,35 +106,36 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ---
 
-## Phase 5: Backend Deduplication (Medium Risk)
+## Phase 5: Backend Deduplication (Medium Risk) ✅ COMPLETE
 
 ### 5.1 Extract Shared Utilities
 
-- [x] ~~Create `backend/src/utils/paths.ts` with shared `CLAUDE_PROJECTS_DIR` constant~~ (FIXED -- `utils/paths.ts` now exists with `CLAUDE_PROJECTS_DIR`, `DATA_DIR`, and `projectDirToFolder`)
+- [x] ~~Create `backend/src/utils/paths.ts` with shared `CLAUDE_PROJECTS_DIR` constant~~ (FIXED -- `utils/paths.ts` now exists with `CLAUDE_PROJECTS_DIR`, `DATA_DIR`, `ensureDataDir`, and `projectDirToFolder`)
 - [x] ~~Create `backend/src/utils/session-log.ts` with shared `findSessionLogPath()` function~~ (FIXED -- both `chats.ts` and `stream.ts` now import from shared utility)
 - [x] ~~Create `backend/src/utils/chat-lookup.ts` with unified `findChat()` function~~ (FIXED -- provides `findChat()` and `findChatForStatus()`; both routes import from shared utility)
 - [x] ~~Update `routes/chats.ts` and `routes/stream.ts` to import from shared utilities instead of defining locally~~ (FIXED)
 
 ### 5.2 Unify Data Directory Resolution
 
-- [x] ~~Audit all 5 services for data directory strategy~~ (DONE -- 4 of 5 now use shared `DATA_DIR`)
+- [x] ~~Audit all 5 services for data directory strategy~~ (DONE -- all 5 now use shared `DATA_DIR`)
 - [x] ~~Create shared `DATA_DIR` constant~~ (FIXED -- in `utils/paths.ts`, used by `chat-file-service.ts`, `queue-file-service.ts`, `sessions.ts`, `image-storage.ts`)
-- [ ] Update `slashCommands.ts` to import `DATA_DIR` from `utils/paths.ts` instead of defining its own via `process.cwd()`
+- [x] ~~Update `slashCommands.ts` to import `DATA_DIR` from `utils/paths.ts` instead of defining its own via `process.cwd()`~~ (FIXED -- imports `DATA_DIR` and `ensureDataDir` from `utils/paths.ts`)
 
 ### 5.3 Extract SSE Helpers
 
-- [ ] Create `backend/src/utils/sse.ts` with `writeSSEHeaders(res)` function
-- [ ] Create shared SSE event handler factory in `backend/src/utils/sse.ts`
-- [ ] Refactor `routes/stream.ts` to use the shared SSE helpers (eliminating 3x repetition)
+- [x] ~~Create `backend/src/utils/sse.ts` with `writeSSEHeaders(res)` function~~ (FIXED)
+- [x] ~~Create shared SSE event handler factory in `backend/src/utils/sse.ts`~~ (FIXED -- `createSSEHandler()` factory + `sendSSE()` helper)
+- [x] ~~Refactor `routes/stream.ts` to use the shared SSE helpers (eliminating 3x repetition)~~ (FIXED -- all 3 SSE endpoints use shared helpers)
 
 ### 5.4 Consolidate Image Metadata Logic
 
-- [ ] Merge `updateChatWithImages()` (`images.ts`) and `storeMessageImages()` (`stream.ts`) into a single function in `services/image-storage.ts`
-- [ ] Update both routes to call the shared function
+- [x] ~~Merge `updateChatWithImages()` (`images.ts`) and `storeMessageImages()` (`stream.ts`) into a single service~~ (FIXED -- consolidated into `services/image-metadata.ts`)
+- [x] ~~Update both routes to call the shared function~~ (FIXED -- `routes/images.ts` and `routes/stream.ts` both import from shared service)
+- [x] ~~Extract `loadImageBuffers()` to `ImageStorageService`~~ (FIXED -- static method + convenience re-export)
 
 ### 5.5 Cache Git Info Properly
 
-- [ ] Extend `getCachedGitInfo()` usage to all bare `getGitInfo()` call sites
+- [x] ~~Extend `getCachedGitInfo()` usage to all bare `getGitInfo()` call sites~~ (FIXED -- replaced in `/new/info` GET and `POST /` routes in `chats.ts`)
 - [ ] Move git info fetching to a service with TTL-based caching
 
 ### 5.6 Deduplicate `migratePermissions()`
@@ -144,8 +145,8 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ### 5.7 Consolidate `ensureDataDir` Pattern
 
-- [ ] Create `backend/src/utils/data-dir.ts` utility that handles `mkdirSync({ recursive: true })` once
-- [ ] Replace the separate `mkdirSync` calls across services
+- [x] ~~Create shared `ensureDataDir()` utility~~ (FIXED -- added to `utils/paths.ts`)
+- [x] ~~Update `slashCommands.ts` to use shared `ensureDataDir()`~~ (FIXED -- imports from `utils/paths.ts` instead of defining locally)
 
 ### 5.8 Consolidate `__dirname` Computation
 
@@ -159,38 +160,38 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 
 ---
 
-## Phase 6: Frontend Deduplication (Medium Risk)
+## Phase 6: Frontend Deduplication (Medium Risk) ✅ COMPLETE
 
 ### 6.1 Consolidate API Layer
 
-- [ ] Move `frontend/src/api/folders.ts` exports into `frontend/src/api.ts` (or restructure into `frontend/src/api/index.ts` barrel)
-- [ ] Remove duplicate `const BASE = '/api'` definition
+- [x] ~~Move `frontend/src/api/folders.ts` exports into `frontend/src/api.ts`~~ (FIXED -- folder functions moved to `api.ts`; `api/folders.ts` removed; all imports updated)
+- [x] ~~Remove duplicate `const BASE = '/api'` definition~~ (FIXED -- single `BASE` constant in `api.ts`)
 
 ### 6.2 Extract Shared Frontend Utilities
 
-- [ ] Create `frontend/src/utils/commands.ts` with shared `getCommandDescription()` function
-- [ ] Update `SlashCommandAutocomplete.tsx` and `SlashCommandsModal.tsx` to import from shared utility
-- [ ] Create `frontend/src/utils/datetime.ts` with shared `getMinDateTime()` function
-- [ ] Update `DraftModal.tsx` and `Queue.tsx` to import from shared utility
+- [x] ~~Create `frontend/src/utils/commands.ts` with shared `getCommandDescription()` and `getCommandCategory()`~~ (FIXED)
+- [x] ~~Update `SlashCommandAutocomplete.tsx` and `SlashCommandsModal.tsx` to import from shared utility~~ (FIXED)
+- [x] ~~Create `frontend/src/utils/datetime.ts` with shared `getMinDateTime()` function~~ (FIXED)
+- [x] ~~Update `DraftModal.tsx`, `ScheduleModal.tsx`, and `Queue.tsx` to import from shared utility~~ (FIXED)
 
 ### 6.3 Create Shared Modal Overlay Component
 
-- [ ] Create `frontend/src/components/ModalOverlay.tsx` with the shared fullscreen overlay pattern
-- [ ] Refactor `ConfirmModal`, `DraftModal`, `Queue` (inline modal), `FolderBrowser`, `SlashCommandsModal` to use `<ModalOverlay>`
+- [x] ~~Create `frontend/src/components/ModalOverlay.tsx` with the shared fullscreen overlay pattern~~ (FIXED)
+- [x] ~~Refactor `ConfirmModal`, `DraftModal`, `ScheduleModal`, `Queue` (inline modal), `FolderBrowser`, `SlashCommandsModal` to use `<ModalOverlay>`~~ (FIXED -- all 6 components refactored)
 
 ### 6.4 Consolidate Plugin State Logic
 
-- [ ] Extract `activePlugins` localStorage read/write logic from `SlashCommandsModal.tsx` and `Chat.tsx` into a shared hook or utility
+- [x] ~~Extract `activePlugins` localStorage read/write logic from `SlashCommandsModal.tsx` and `Chat.tsx` into shared utility~~ (FIXED -- `utils/plugins.ts` with `getActivePlugins()` / `setActivePlugins()`; both components import from shared)
 
 ### 6.5 Standardize Error Handling in API Functions
 
-- [ ] Audit all functions in `frontend/src/api.ts` -- ensure consistent throw-on-error behavior
-- [ ] Remove silent fallback returns (e.g., `getSlashCommands` returning empty array on error)
+- [x] ~~Audit all functions in `frontend/src/api.ts` -- ensure consistent throw-on-error behavior~~ (FIXED -- shared `assertOk()` helper; all API functions now use it consistently)
+- [x] ~~Remove silent fallback returns~~ (FIXED -- all inline `if (!res.ok)` patterns replaced with `assertOk()`)
 
 ### 6.6 Add Input Validation to BranchSelector
 
 - [x] ~~Add client-side git branch name validation regex to `BranchSelector.tsx` input~~ (FIXED -- `validateBranchName()` with comprehensive checks; error display integrated into input)
-- [ ] Ensure worktree path preview (`BranchSelector.tsx`) matches backend path computation to avoid misleading users
+- [x] ~~Ensure worktree path preview (`BranchSelector.tsx`) matches backend path computation~~ (FIXED -- mirrors backend `ensureWorktree` logic; handles trailing slashes like `path.dirname`)
 
 ### 6.7 Fix `formatRelativeTime()` Edge Cases
 
@@ -246,7 +247,7 @@ Ordered by dependency, risk level, and impact. Complete top-to-bottom.
 - [ ] Add a batched `/api/sessions/status` endpoint to replace N parallel `getSessionStatus()` calls in ChatList
 - [ ] Add debounce to resize listener in `hooks/useIsMobile.ts`
 - [ ] Memoize `remarkPlugins`, `rehypePlugins`, `components` arrays in `MarkdownRenderer.tsx`
-- [ ] Replace 6x `.filter()` with a single `.reduce()` for queue tab counts in `Queue.tsx`
+- [x] ~~Replace 6x `.filter()` with a single `.reduce()` for queue tab counts in `Queue.tsx`~~ (FIXED -- `useMemo` + single `for..of` loop)
 - [ ] Cache `getValidationMessage()` result in `FolderSelector.tsx` to avoid double-call
 - [ ] Implement tiered interval in `useRelativeTime.ts` (5s for <60s, 30s for <60m) to reduce re-renders from dozens of concurrent 5-second intervals
 

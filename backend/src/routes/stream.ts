@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { sendMessage, getActiveSession, stopSession, respondToPermission, hasPendingRequest, getPendingRequest, type StreamEvent } from "../services/claude.js";
 import { OpenRouterClient } from "../services/openrouter-client.js";
-import { ImageStorageService } from "../services/image-storage.js";
+import { loadImageBuffers } from "../services/image-storage.js";
+import { storeMessageImages } from "../services/image-metadata.js";
 import { statSync, existsSync, watchFile, unwatchFile, openSync, readSync, closeSync } from "fs";
 import { chatFileService } from "../services/chat-file-service.js";
 import { ensureWorktree, switchBranch } from "../utils/git.js";
 import { findSessionLogPath } from "../utils/session-log.js";
 import { findChatForStatus } from "../utils/chat-lookup.js";
+import { writeSSEHeaders, sendSSE, createSSEHandler } from "../utils/sse.js";
 
 export const streamRouter = Router();
 
@@ -92,21 +94,18 @@ streamRouter.post("/new/message", async (req, res) => {
     const targetBranch = newBranch || baseBranch;
 
     if (targetBranch && useWorktree) {
-      // Worktree mode: create/reuse a sibling worktree
       try {
         effectiveFolder = ensureWorktree(folder, targetBranch, !!newBranch, baseBranch);
       } catch (err: any) {
         return res.status(500).json({ error: `Failed to create worktree: ${err.message}` });
       }
     } else if (newBranch) {
-      // Non-worktree mode with new branch: create and checkout in original repo
       try {
         switchBranch(folder, newBranch, true, baseBranch);
       } catch (err: any) {
         return res.status(500).json({ error: `Failed to create branch: ${err.message}` });
       }
     } else if (baseBranch) {
-      // Non-worktree mode, different base branch selected: checkout
       try {
         switchBranch(folder, baseBranch, false);
       } catch (err: any) {
@@ -116,25 +115,8 @@ streamRouter.post("/new/message", async (req, res) => {
   }
 
   try {
-    // Fetch image data if imageIds are provided
-    const imageMetadata: { buffer: Buffer; mimeType: string }[] = [];
-    if (imageIds && imageIds.length > 0) {
-      for (const imageId of imageIds) {
-        try {
-          const result = ImageStorageService.getImage(imageId);
-          if (result) {
-            imageMetadata.push({
-              buffer: result.buffer,
-              mimeType: result.image.mimeType,
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to load image ${imageId}:`, error);
-        }
-      }
-    }
+    const imageMetadata = imageIds?.length ? loadImageBuffers(imageIds) : [];
 
-    // Start a new chat session (using effectiveFolder which may be a worktree path)
     const emitter = await sendMessage({
       prompt,
       folder: effectiveFolder,
@@ -143,21 +125,15 @@ streamRouter.post("/new/message", async (req, res) => {
       activePlugins,
     });
 
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
+    writeSSEHeaders(res);
 
     let chatId: string | null = null;
 
+    // Custom handler for new chat — needs to intercept chat_created event
     const onEvent = (event: StreamEvent) => {
-      // Handle chat_created event - capture chatId and forward to client
       if (event.type === "chat_created") {
         chatId = event.chatId || null;
-        res.write(`data: ${JSON.stringify({ type: "chat_created", chatId: event.chatId, chat: event.chat })}\n\n`);
-
-        // Generate title for the new chat
+        sendSSE(res, { type: "chat_created", chatId: event.chatId, chat: event.chat });
         if (chatId) {
           generateAndSaveTitle(chatId, prompt);
         }
@@ -165,17 +141,17 @@ streamRouter.post("/new/message", async (req, res) => {
       }
 
       if (event.type === "done") {
-        res.write(`data: ${JSON.stringify({ type: "message_complete" })}\n\n`);
+        sendSSE(res, { type: "message_complete" });
         emitter.removeListener("event", onEvent);
         res.end();
       } else if (event.type === "error") {
-        res.write(`data: ${JSON.stringify({ type: "message_error", content: event.content })}\n\n`);
+        sendSSE(res, { type: "message_error", content: event.content });
         emitter.removeListener("event", onEvent);
         res.end();
       } else if (event.type === "permission_request" || event.type === "user_question" || event.type === "plan_review") {
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
+        sendSSE(res, event as unknown as Record<string, unknown>);
       } else {
-        res.write(`data: ${JSON.stringify({ type: "message_update" })}\n\n`);
+        sendSSE(res, { type: "message_update" });
       }
     };
 
@@ -217,24 +193,9 @@ streamRouter.post("/:id/message", async (req, res) => {
   if (!prompt) return res.status(400).json({ error: "prompt is required" });
 
   try {
-    // Fetch image data if imageIds are provided
-    const imageMetadata: { buffer: Buffer; mimeType: string }[] = [];
-    if (imageIds && imageIds.length > 0) {
-      for (const imageId of imageIds) {
-        try {
-          const result = ImageStorageService.getImage(imageId);
-          if (result) {
-            imageMetadata.push({
-              buffer: result.buffer,
-              mimeType: result.image.mimeType,
-            });
-          }
-        } catch (error) {
-          console.error(`Failed to load image ${imageId}:`, error);
-        }
-      }
+    const imageMetadata = imageIds?.length ? loadImageBuffers(imageIds) : [];
 
-      // Store image metadata in chat metadata for this message
+    if (imageIds?.length) {
       await storeMessageImages(req.params.id, imageIds);
     }
 
@@ -248,31 +209,9 @@ streamRouter.post("/:id/message", async (req, res) => {
     // Generate title synchronously from first message
     await generateAndSaveTitle(req.params.id, prompt);
 
-    res.writeHead(200, {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      Connection: "keep-alive",
-    });
+    writeSSEHeaders(res);
 
-    const onEvent = (event: StreamEvent) => {
-      // Send notification events instead of full content
-      if (event.type === "done") {
-        res.write(`data: ${JSON.stringify({ type: "message_complete" })}\n\n`);
-        emitter.removeListener("event", onEvent);
-        res.end();
-      } else if (event.type === "error") {
-        res.write(`data: ${JSON.stringify({ type: "message_error", content: event.content })}\n\n`);
-        emitter.removeListener("event", onEvent);
-        res.end();
-      } else if (event.type === "permission_request" || event.type === "user_question" || event.type === "plan_review") {
-        // Still send permission/interaction requests as before
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      } else {
-        // For other events (text, thinking, tool_use, tool_result), just send a notification
-        res.write(`data: ${JSON.stringify({ type: "message_update" })}\n\n`);
-      }
-    };
-
+    const onEvent = createSSEHandler(res, emitter);
     emitter.on("event", onEvent);
 
     req.on("close", () => {
@@ -282,38 +221,6 @@ streamRouter.post("/:id/message", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
-/**
- * Store image metadata for a message in chat metadata
- */
-async function storeMessageImages(chatId: string, imageIds: string[]): Promise<void> {
-  const chat = chatFileService.getChat(chatId);
-
-  if (!chat) {
-    console.warn(`Chat ${chatId} not found in database, skipping image metadata storage`);
-    return;
-  }
-
-  const metadata = JSON.parse(chat.metadata || "{}");
-
-  // Create a unique message ID for this set of images
-  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-
-  if (!metadata.messageImages) {
-    metadata.messageImages = {};
-  }
-
-  metadata.messageImages[messageId] = {
-    imageIds,
-    timestamp: new Date().toISOString(),
-    messageType: "user",
-  };
-
-  // Update the chat metadata
-  chatFileService.updateChat(chatId, {
-    metadata: JSON.stringify(metadata),
-  });
-}
 
 // SSE endpoint for connecting to an active stream (web or CLI)
 streamRouter.get("/:id/stream", (req, res) => {
@@ -325,33 +232,11 @@ streamRouter.get("/:id/stream", (req, res) => {
   const chatId = req.params.id;
   const session = getActiveSession(chatId);
 
-  res.writeHead(200, {
-    "Content-Type": "text/event-stream",
-    "Cache-Control": "no-cache",
-    Connection: "keep-alive",
-  });
+  writeSSEHeaders(res);
 
   // If there's an active web session, connect to it
   if (session) {
-    const onEvent = (event: StreamEvent) => {
-      // Send notification events instead of full content
-      if (event.type === "done") {
-        res.write(`data: ${JSON.stringify({ type: "message_complete" })}\n\n`);
-        session.emitter.removeListener("event", onEvent);
-        res.end();
-      } else if (event.type === "error") {
-        res.write(`data: ${JSON.stringify({ type: "message_error", content: event.content })}\n\n`);
-        session.emitter.removeListener("event", onEvent);
-        res.end();
-      } else if (event.type === "permission_request" || event.type === "user_question" || event.type === "plan_review") {
-        // Still send permission/interaction requests as before
-        res.write(`data: ${JSON.stringify(event)}\n\n`);
-      } else {
-        // For other events (text, thinking, tool_use, tool_result), just send a notification
-        res.write(`data: ${JSON.stringify({ type: "message_update" })}\n\n`);
-      }
-    };
-
+    const onEvent = createSSEHandler(res, session.emitter);
     session.emitter.on("event", onEvent);
 
     req.on("close", () => {
@@ -363,14 +248,14 @@ streamRouter.get("/:id/stream", (req, res) => {
   // No web session - check if we can watch CLI session
   const chat = findChatForStatus(chatId);
   if (!chat?.session_id) {
-    res.write(`data: ${JSON.stringify({ type: "error", content: "No active session found" })}\n\n`);
+    sendSSE(res, { type: "error", content: "No active session found" });
     res.end();
     return;
   }
 
   const logPath = findSessionLogPath(chat.session_id);
   if (!logPath || !existsSync(logPath)) {
-    res.write(`data: ${JSON.stringify({ type: "error", content: "Session log not found" })}\n\n`);
+    sendSSE(res, { type: "error", content: "Session log not found" });
     res.end();
     return;
   }
@@ -385,7 +270,6 @@ streamRouter.get("/:id/stream", (req, res) => {
     try {
       const newStats = statSync(logPath);
       if (newStats.size > lastPosition) {
-        // Read only the new content since last position
         const buffer = Buffer.alloc(newStats.size - lastPosition);
         const fd = openSync(logPath, "r");
         readSync(fd, buffer, 0, buffer.length, lastPosition);
@@ -399,16 +283,12 @@ streamRouter.get("/:id/stream", (req, res) => {
           try {
             const parsed = JSON.parse(line);
             if (parsed.message?.content) {
-              // Just notify that there's new content, don't send the actual content
-              res.write(`data: ${JSON.stringify({ type: "message_update" })}\n\n`);
+              sendSSE(res, { type: "message_update" });
             }
-
-            // Check if this is the end of the conversation
             if (parsed.type === "summary" || parsed.message?.stop_reason) {
-              res.write(`data: ${JSON.stringify({ type: "message_complete" })}\n\n`);
+              sendSSE(res, { type: "message_complete" });
             }
           } catch (err) {
-            // Log parsing errors for debugging instead of silently ignoring
             console.warn("[CLI Monitor] Failed to parse log line:", err instanceof Error ? err.message : "Unknown error", "Line:", line.slice(0, 100));
           }
         }
@@ -511,7 +391,6 @@ streamRouter.get("/:id/status", (req, res) => {
     const now = Date.now();
     const fiveMinutesAgo = now - 5 * 60 * 1000;
 
-    // Consider CLI session active if .jsonl was modified in last 5 minutes
     const isRecentlyActive = lastModified > fiveMinutesAgo;
 
     res.json({

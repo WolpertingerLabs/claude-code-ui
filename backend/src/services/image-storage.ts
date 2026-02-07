@@ -153,6 +153,29 @@ export class ImageStorageService {
   }
 
   /**
+   * Load image buffers for a list of image IDs.
+   * Returns an array of { buffer, mimeType } for successfully loaded images.
+   * Logs errors for individual failures without throwing.
+   */
+  static loadImageBuffers(imageIds: string[]): { buffer: Buffer; mimeType: string }[] {
+    const results: { buffer: Buffer; mimeType: string }[] = [];
+    for (const imageId of imageIds) {
+      try {
+        const result = ImageStorageService.getImage(imageId);
+        if (result) {
+          results.push({
+            buffer: result.buffer,
+            mimeType: result.image.mimeType,
+          });
+        }
+      } catch (error) {
+        console.error(`Failed to load image ${imageId}:`, error);
+      }
+    }
+    return results;
+  }
+
+  /**
    * Get file extension from MIME type
    */
   private static getExtensionFromMimeType(mimeType: string): string {
@@ -180,3 +203,6 @@ export class ImageStorageService {
     return mapping[ext.toLowerCase()] || "application/octet-stream";
   }
 }
+
+/** Convenience re-export of ImageStorageService.loadImageBuffers for direct import. */
+export const loadImageBuffers = ImageStorageService.loadImageBuffers.bind(ImageStorageService);

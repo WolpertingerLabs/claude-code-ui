@@ -90,11 +90,13 @@ export default function BranchSelector({ folder, currentBranch, onChange }: Bran
     propagateChange(baseBranch, newBranch, useWorktree);
   }, [baseBranch, newBranch, useWorktree, propagateChange, branchError]);
 
-  // Compute worktree path preview
+  // Compute worktree path preview (mirrors backend ensureWorktree in git.ts)
   const effectiveBranch = newBranch.trim() || baseBranch;
   const sanitized = effectiveBranch.replace(/\//g, "-");
-  const repoName = folder.split("/").pop() || "repo";
-  const parentDir = folder.split("/").slice(0, -1).join("/");
+  const trimmedFolder = folder.replace(/\/+$/, ""); // strip trailing slashes like path.dirname
+  const lastSlash = trimmedFolder.lastIndexOf("/");
+  const repoName = lastSlash >= 0 ? trimmedFolder.slice(lastSlash + 1) : trimmedFolder || "repo";
+  const parentDir = lastSlash >= 0 ? trimmedFolder.slice(0, lastSlash) : "";
   const worktreePath = `${parentDir}/${repoName}.${sanitized}`;
 
   // Determine display label for collapsed state

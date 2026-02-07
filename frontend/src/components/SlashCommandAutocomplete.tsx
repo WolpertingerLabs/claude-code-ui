@@ -1,4 +1,5 @@
 import { useMemo } from "react";
+import { getCommandDescription } from "../utils/commands";
 
 interface Props {
   slashCommands: string[];
@@ -119,16 +120,4 @@ export default function SlashCommandAutocomplete({ slashCommands, query, onSelec
       ))}
     </div>
   );
-}
-
-// Helper function to provide descriptions for common commands
-function getCommandDescription(command: string): string | null {
-  const descriptions: Record<string, string> = {
-    "/help": "Show help information",
-    "/clear": "Clear the conversation",
-    "/compact": "Switch to compact view",
-    "/model": "Change AI model",
-  };
-
-  return descriptions[command] || null;
 }

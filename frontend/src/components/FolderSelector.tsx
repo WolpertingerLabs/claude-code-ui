@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { AlertCircle, CheckCircle, Search } from "lucide-react";
-import { validatePath, type ValidateResult } from "../api/folders";
+import { validatePath, type ValidateResult } from "../api";
 import FolderBrowser from "./FolderBrowser";
 
 interface FolderSelectorProps {

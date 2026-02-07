@@ -286,11 +286,8 @@ chatsRouter.get("/new/info", (req, res) => {
     return res.status(400).json({ error: "folder does not exist" });
   }
 
-  // Get git info for the folder
-  let gitInfo: { isGitRepo: boolean; branch?: string } = { isGitRepo: false };
-  try {
-    gitInfo = getGitInfo(folder);
-  } catch {}
+  // Get cached git info for the folder
+  const gitInfo = getCachedGitInfo(folder);
 
   // Get slash commands and plugins for the folder
   let slashCommands: any[] = [];
@@ -342,11 +339,8 @@ chatsRouter.post("/", (req, res) => {
     ...(defaultPermissions && { defaultPermissions }),
   };
 
-  // Get git info for the folder
-  let gitInfo: { isGitRepo: boolean; branch?: string } = { isGitRepo: false };
-  try {
-    gitInfo = getGitInfo(folder);
-  } catch {}
+  // Get cached git info for the folder
+  const gitInfo = getCachedGitInfo(folder);
 
   // Get slash commands and plugins for the folder
   let slashCommands: any[] = [];

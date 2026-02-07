@@ -1,6 +1,9 @@
 import { X, Hash, Puzzle, Check } from "lucide-react";
 import { useState } from "react";
 import { Plugin } from "../types/plugins";
+import { getCommandDescription, getCommandCategory } from "../utils/commands";
+import { getActivePlugins, setActivePlugins } from "../utils/plugins";
+import ModalOverlay from "./ModalOverlay";
 
 interface Props {
   isOpen: boolean;
@@ -9,60 +12,6 @@ interface Props {
   plugins?: Plugin[];
   onCommandSelect?: (command: string) => void;
   onActivePluginsChange?: (activePluginIds: string[]) => void;
-}
-
-function getCommandDescription(command: string): string {
-  const descriptions: Record<string, string> = {
-    "compact": "Switch to compact view mode",
-    "context": "Show context information",
-    "cost": "Display API usage costs",
-    "init": "Initialize a new project or workspace",
-    "output-style:new": "Create a new output style",
-    "pr-comments": "Generate pull request review comments",
-    "release-notes": "Generate release notes from git history",
-    "todos": "Show or manage todo items",
-    "review": "Review code changes",
-    "security-review": "Perform security review of code",
-    "help": "Show help information",
-    "clear": "Clear the conversation",
-    "model": "Switch AI model",
-  };
-
-  return descriptions[command] || "No description available";
-}
-
-function getCommandCategory(command: string): string {
-  if (["pr-comments", "release-notes", "review", "security-review"].includes(command)) {
-    return "Development";
-  }
-  if (["compact", "output-style:new", "help", "clear", "model"].includes(command)) {
-    return "Interface";
-  }
-  if (["context", "cost", "todos"].includes(command)) {
-    return "Information";
-  }
-  if (["init"].includes(command)) {
-    return "Project";
-  }
-  return "Other";
-}
-
-// Plugin activation state management
-function getActivePlugins(): Set<string> {
-  try {
-    const active = localStorage.getItem("activePlugins");
-    return new Set(active ? JSON.parse(active) : []);
-  } catch {
-    return new Set();
-  }
-}
-
-function setActivePlugins(activeIds: Set<string>): void {
-  try {
-    localStorage.setItem("activePlugins", JSON.stringify(Array.from(activeIds)));
-  } catch {
-    // Handle localStorage errors gracefully
-  }
 }
 
 export default function SlashCommandsModal({ isOpen, onClose, slashCommands, plugins = [], onCommandSelect, onActivePluginsChange }: Props) {
@@ -102,18 +51,7 @@ export default function SlashCommandsModal({ isOpen, onClose, slashCommands, plu
   };
 
   return (
-    <div
-      style={{
-        position: "fixed",
-        inset: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-        padding: "20px",
-      }}
-    >
+    <ModalOverlay style={{ padding: "20px" }}>
       <div
         style={{
           backgroundColor: "var(--bg)",
@@ -257,7 +195,7 @@ export default function SlashCommandsModal({ isOpen, onClose, slashCommands, plu
                               lineHeight: 1.4,
                             }}
                           >
-                            {getCommandDescription(command)}
+                            {getCommandDescription(command) ?? "No description available"}
                           </p>
                         </div>
                       </button>
@@ -453,6 +391,6 @@ export default function SlashCommandsModal({ isOpen, onClose, slashCommands, plu
           </p>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

@@ -1,6 +1,6 @@
 # Full Architectural Review: Claude Code UI
 
-> **Last updated:** Post-commit `478305b` (refactor: create shared types package, deduplicate backend utils, and fix quick wins)
+> **Last updated:** Post Phase 5+6 deduplication (backend + frontend dedup, SSE helpers, image metadata consolidation, shared ModalOverlay, standardized API error handling)
 
 ## Table of Contents
 
@@ -65,30 +65,30 @@
 
 ### Cross-File Duplications (Backend)
 
-| What                                              | Location A                       | Location B                             | Impact                                                                                                                                           |
-| ------------------------------------------------- | -------------------------------- | -------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------ |
-| ~~`findSessionLogPath()`~~                        | ~~`routes/chats.ts:22-29`~~      | ~~`routes/stream.ts:16-25`~~           | **FIXED** -- extracted to `utils/session-log.ts`; both routes now import from shared utility                                                     |
-| ~~`CLAUDE_PROJECTS_DIR` constant~~                | ~~`routes/chats.ts:12`~~         | ~~`routes/stream.ts:12`~~              | **FIXED** -- now shared via `utils/paths.ts`                                                                                                     |
-| ~~`findChat()` / `findChatForStatus()`~~          | ~~`routes/chats.ts:413-466`~~    | ~~`routes/stream.ts:30-43`~~           | **FIXED** -- extracted to `utils/chat-lookup.ts`; both routes now import from shared utility                                                     |
-| SSE event handler pattern                         | `routes/stream.ts:186-212`       | `routes/stream.ts:306-323` & `385-402` | Same handler logic repeated **3 times**                                                                                                          |
-| SSE header block                                  | `routes/stream.ts:178-182`       | `routes/stream.ts:300-304` & `377-381` | Same 5-line writeHead block **3 times**                                                                                                          |
-| Image loading loop                                | `routes/stream.ts:152-167`       | `routes/stream.ts:260-288`             | Same iteration over imageIds                                                                                                                     |
-| `updateChatWithImages()` / `storeMessageImages()` | `routes/images.ts:205-230`       | `routes/stream.ts:338-365`             | Near-identical metadata storage                                                                                                                  |
-| Git info fetch pattern                            | `routes/chats.ts`                | Lines 304, 360, 427, 447               | Same bare try/catch `getGitInfo()` block **4 times** (cached version exists at line 223 but only used once)                                      |
-| `__dirname` computation                           | **2 files**                      | `index.ts:7,73`, `swagger.ts:5`        | Partially fixed -- 5 services now use `DATA_DIR` from `utils/paths.ts`; only `index.ts` and `swagger.ts` still compute `__dirname` independently |
-| ~~`migratePermissions()`~~                        | ~~`backend/services/claude.ts`~~ | ~~`frontend/utils/localStorage.ts`~~   | **FIXED** -- moved to `shared/types/permissions.ts`; both ends now import from shared                                                            |
+| What                                                  | Location A                       | Location B                                 | Impact                                                                                                                                           |
+| ----------------------------------------------------- | -------------------------------- | ------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| ~~`findSessionLogPath()`~~                            | ~~`routes/chats.ts:22-29`~~      | ~~`routes/stream.ts:16-25`~~               | **FIXED** -- extracted to `utils/session-log.ts`; both routes now import from shared utility                                                     |
+| ~~`CLAUDE_PROJECTS_DIR` constant~~                    | ~~`routes/chats.ts:12`~~         | ~~`routes/stream.ts:12`~~                  | **FIXED** -- now shared via `utils/paths.ts`                                                                                                     |
+| ~~`findChat()` / `findChatForStatus()`~~              | ~~`routes/chats.ts:413-466`~~    | ~~`routes/stream.ts:30-43`~~               | **FIXED** -- extracted to `utils/chat-lookup.ts`; both routes now import from shared utility                                                     |
+| ~~SSE event handler pattern~~                         | ~~`routes/stream.ts:186-212`~~   | ~~`routes/stream.ts:306-323` & `385-402`~~ | **FIXED** -- extracted to `utils/sse.ts` with `writeSSEHeaders()`, `sendSSE()`, `createSSEHandler()` factory                                     |
+| ~~SSE header block~~                                  | ~~`routes/stream.ts:178-182`~~   | ~~`routes/stream.ts:300-304` & `377-381`~~ | **FIXED** -- `writeSSEHeaders()` in `utils/sse.ts`                                                                                               |
+| ~~Image loading loop~~                                | ~~`routes/stream.ts:152-167`~~   | ~~`routes/stream.ts:260-288`~~             | **FIXED** -- `loadImageBuffers()` static method on `ImageStorageService`                                                                         |
+| ~~`updateChatWithImages()` / `storeMessageImages()`~~ | ~~`routes/images.ts:205-230`~~   | ~~`routes/stream.ts:338-365`~~             | **FIXED** -- consolidated into `services/image-metadata.ts`; both routes import from shared service                                              |
+| ~~Git info fetch pattern~~                            | ~~`routes/chats.ts`~~            | ~~Lines 304, 360, 427, 447~~               | **FIXED** -- all bare `getGitInfo()` calls replaced with `getCachedGitInfo()`                                                                    |
+| `__dirname` computation                               | **2 files**                      | `index.ts:7,73`, `swagger.ts:5`            | Partially fixed -- 5 services now use `DATA_DIR` from `utils/paths.ts`; only `index.ts` and `swagger.ts` still compute `__dirname` independently |
+| ~~`migratePermissions()`~~                            | ~~`backend/services/claude.ts`~~ | ~~`frontend/utils/localStorage.ts`~~       | **FIXED** -- moved to `shared/types/permissions.ts`; both ends now import from shared                                                            |
 
 ### Cross-File Duplications (Frontend)
 
-| What                               | Location A                                                                                    | Location B                                   |
-| ---------------------------------- | --------------------------------------------------------------------------------------------- | -------------------------------------------- | ---------------------------------------------------------------------------------------------- |
-| ~~`Plugin` type definitions~~      | ~~`frontend/src/api.ts:9-26`~~                                                                | ~~`frontend/src/types/plugins.ts:1-18`~~     | **FIXED** -- both now import from `shared/types/plugins.ts`; `types/plugins.ts` is a re-export |
-| `getCommandDescription()`          | `SlashCommandAutocomplete.tsx:125-134`                                                        | `SlashCommandsModal.tsx:14-32`               |
-| `getMinDateTime()`                 | `DraftModal.tsx:65-69`                                                                        | `Queue.tsx:375` (inline)                     |
-| `activePlugins` localStorage logic | `SlashCommandsModal.tsx:51-66`                                                                | `Chat.tsx:462-483`                           |
-| In-flight message UI block         | `Chat.tsx:956-986`                                                                            | `Chat.tsx:1027-1057`                         |
-| Modal overlay pattern              | `ConfirmModal`, `DraftModal`, `ScheduleModal`, `Queue`, `FolderBrowser`, `SlashCommandsModal` | Same 10-line style block in **6 components** |
-| Worktree path computation          | `frontend/src/components/BranchSelector.tsx:72-76`                                            | `backend/src/utils/git.ts:233-240`           | Client-side preview computes path independently from backend -- can diverge                    |
+| What                                   | Location A                                                                                        | Location B                                       |
+| -------------------------------------- | ------------------------------------------------------------------------------------------------- | ------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
+| ~~`Plugin` type definitions~~          | ~~`frontend/src/api.ts:9-26`~~                                                                    | ~~`frontend/src/types/plugins.ts:1-18`~~         | **FIXED** -- both now import from `shared/types/plugins.ts`; `types/plugins.ts` is a re-export |
+| ~~`getCommandDescription()`~~          | ~~`SlashCommandAutocomplete.tsx:125-134`~~                                                        | ~~`SlashCommandsModal.tsx:14-32`~~               | **FIXED** -- extracted to `utils/commands.ts`; both components import from shared              |
+| ~~`getMinDateTime()`~~                 | ~~`DraftModal.tsx:65-69`~~                                                                        | ~~`Queue.tsx:375` (inline)~~                     | **FIXED** -- extracted to `utils/datetime.ts`; DraftModal, ScheduleModal, Queue all use shared |
+| ~~`activePlugins` localStorage logic~~ | ~~`SlashCommandsModal.tsx:51-66`~~                                                                | ~~`Chat.tsx:462-483`~~                           | **FIXED** -- extracted to `utils/plugins.ts` with `getActivePlugins()` / `setActivePlugins()`  |
+| In-flight message UI block             | `Chat.tsx:956-986`                                                                                | `Chat.tsx:1027-1057`                             |                                                                                                |
+| ~~Modal overlay pattern~~              | ~~`ConfirmModal`, `DraftModal`, `ScheduleModal`, `Queue`, `FolderBrowser`, `SlashCommandsModal`~~ | ~~Same 10-line style block in **6 components**~~ | **FIXED** -- shared `<ModalOverlay>` component; all 6 components refactored                    |
+| ~~Worktree path computation~~          | ~~`frontend/src/components/BranchSelector.tsx:72-76`~~                                            | ~~`backend/src/utils/git.ts:233-240`~~           | **FIXED** -- frontend path preview now mirrors backend logic (handles trailing slashes)        |
 
 ### Cross-Boundary Duplications (Backend <-> Frontend)
 
@@ -141,7 +141,7 @@
 | **No debounce on resize listener**                           | `hooks/useIsMobile.ts`                        | LOW      | `setState` on every resize event                                                                                                                                    |
 | **`getValidationMessage()` called twice**                    | `FolderSelector.tsx:176-180`                  | LOW      | Called for truthiness check, then again for display                                                                                                                 |
 | **MarkdownRenderer creates new arrays every render**         | `MarkdownRenderer.tsx`                        | LOW      | `remarkPlugins`, `rehypePlugins`, `components` not memoized -- triggers re-renders                                                                                  |
-| **Queue tab counts filter full array 6 times**               | `Queue.tsx:93-100`                            | LOW      | Should be a single reduce pass                                                                                                                                      |
+| ~~**Queue tab counts filter full array 6 times**~~           | ~~`Queue.tsx:93-100`~~                        | ~~LOW~~  | **FIXED** -- replaced with single `useMemo` + `for..of` loop computing all counts in one pass                                                                       |
 
 ---
 
@@ -199,15 +199,15 @@
 
 ### Inconsistent Data Directory Resolution
 
-Mostly fixed -- 4 of 5 services now use `DATA_DIR` from `utils/paths.ts`. One holdout remains:
+**FIXED** -- All 5 services now use `DATA_DIR` from `utils/paths.ts`:
 
-| Service                     | Strategy                                            | Status                                                    |
-| --------------------------- | --------------------------------------------------- | --------------------------------------------------------- |
-| ~~`sessions.ts`~~           | ~~`__dirname + '../../../data'`~~                   | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts` |
-| ~~`chat-file-service.ts`~~  | ~~`__dirname + '../../data/chats'`~~                | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts` |
-| ~~`image-storage.ts`~~      | (was independent)                                   | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts` |
-| ~~`queue-file-service.ts`~~ | (was independent)                                   | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts` |
-| `slashCommands.ts`          | `process.cwd() + '/data'` -> depends on working dir | **NOT FIXED** -- still defines own `DATA_DIR` locally     |
+| Service                     | Strategy                             | Status                                                                        |
+| --------------------------- | ------------------------------------ | ----------------------------------------------------------------------------- |
+| ~~`sessions.ts`~~           | ~~`__dirname + '../../../data'`~~    | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts`                     |
+| ~~`chat-file-service.ts`~~  | ~~`__dirname + '../../data/chats'`~~ | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts`                     |
+| ~~`image-storage.ts`~~      | (was independent)                    | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts`                     |
+| ~~`queue-file-service.ts`~~ | (was independent)                    | **FIXED** -- now imports `DATA_DIR` from `utils/paths.ts`                     |
+| ~~`slashCommands.ts`~~      | ~~`process.cwd() + '/data'`~~        | **FIXED** -- now imports `DATA_DIR` and `ensureDataDir` from `utils/paths.ts` |
 
 ### Debug Logging in Production
 
@@ -245,7 +245,7 @@ Mostly fixed -- 4 of 5 services now use `DATA_DIR` from `utils/paths.ts`. One ho
 
 ### Other Styling Issues
 
-- **6 modal components** each re-implement the same fullscreen overlay pattern (~10 lines each) -- no shared `<ModalOverlay>` component
+- ~~**6 modal components** each re-implement the same fullscreen overlay pattern (~10 lines each) -- no shared `<ModalOverlay>` component~~ **FIXED** -- shared `<ModalOverlay>` component created; all 6 components refactored
 - **4 different monospace font stacks** used across components
 - ~~**Identical `.hljs` media query rules** for dark and light mode in `index.css` (lines 136-154)~~ **FIXED** -- removed redundant dark/light media queries; base rule already uses CSS variables
 - **All inline `style={{}}`** -- new objects created on every render, no hover/focus pseudo-class support, no reuse

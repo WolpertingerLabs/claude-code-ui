@@ -2,6 +2,7 @@ import { Router } from "express";
 import multer from "multer";
 import { ImageStorageService, type StoredImage } from "../services/image-storage.js";
 import { chatFileService } from "../services/chat-file-service.js";
+import { updateChatWithImages } from "../services/image-metadata.js";
 
 export const imagesRouter = Router();
 
@@ -198,36 +199,6 @@ imagesRouter.get("/:chatId/images", (req, res) => {
     res.status(500).json({ error: "Failed to retrieve chat images" });
   }
 });
-
-/**
- * Update chat metadata with new images
- */
-async function updateChatWithImages(chatId: string, images: StoredImage[]): Promise<void> {
-  const chat = chatFileService.getChat(chatId);
-
-  if (!chat) {
-    // Chat might not exist in DB if it's from filesystem
-    // For now, we'll skip metadata updates for filesystem-only chats
-    console.warn(`Chat ${chatId} not found in database, skipping metadata update`);
-    return;
-  }
-
-  const metadata = JSON.parse(chat.metadata || "{}");
-
-  // Store images with a timestamp-based message ID
-  const messageId = `msg_${Date.now()}_${Math.random().toString(36).substring(2)}`;
-
-  if (!metadata.images) {
-    metadata.images = {};
-  }
-
-  metadata.images[messageId] = images;
-
-  // Update the chat metadata
-  chatFileService.updateChat(chatId, {
-    metadata: JSON.stringify(metadata),
-  });
-}
 
 /**
  * Remove an image from all chat metadata

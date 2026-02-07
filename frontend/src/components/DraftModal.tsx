@@ -1,5 +1,7 @@
 import { useState, useEffect } from "react";
 import { createDraft, scheduleMessage, type DefaultPermissions } from "../api";
+import { getMinDateTime } from "../utils/datetime";
+import ModalOverlay from "./ModalOverlay";
 
 interface DraftModalProps {
   isOpen: boolean;
@@ -62,27 +64,8 @@ export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess
     }
   };
 
-  const getMinDateTime = () => {
-    const now = new Date();
-    now.setMinutes(now.getMinutes() + 1);
-    return now.toISOString().slice(0, 16);
-  };
-
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        background: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-    >
+    <ModalOverlay>
       <div
         style={{
           background: "var(--bg)",
@@ -220,6 +203,6 @@ export default function DraftModal({ isOpen, onClose, chatId, message, onSuccess
           </div>
         </div>
       </div>
-    </div>
+    </ModalOverlay>
   );
 }

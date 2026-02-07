@@ -1,4 +1,4 @@
-import { statSync } from "fs";
+import { statSync, existsSync, mkdirSync } from "fs";
 import { join } from "path";
 import { homedir } from "os";
 
@@ -6,6 +6,13 @@ export const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
 
 /** Absolute path to the project data directory (stable across dev/prod). */
 export const DATA_DIR = join(process.cwd(), "data");
+
+/** Ensure the data directory exists (idempotent, safe to call multiple times). */
+export function ensureDataDir(): void {
+  if (!existsSync(DATA_DIR)) {
+    mkdirSync(DATA_DIR, { recursive: true });
+  }
+}
 
 function isDirectory(p: string): boolean {
   try {

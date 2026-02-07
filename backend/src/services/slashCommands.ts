@@ -1,8 +1,8 @@
-import { writeFileSync, readFileSync, existsSync, mkdirSync } from "fs";
+import { writeFileSync, readFileSync, existsSync } from "fs";
 import { join } from "path";
 import { getPluginsForDirectory, Plugin, pluginToSlashCommands } from "./plugins.js";
+import { DATA_DIR, ensureDataDir } from "../utils/paths.js";
 
-const DATA_DIR = join(process.cwd(), "data");
 const SLASH_COMMANDS_FILE = join(DATA_DIR, "slash-commands.json");
 
 interface SlashCommandsData {
@@ -12,15 +12,6 @@ interface SlashCommandsData {
 export interface DirectoryCommandsAndPlugins {
   slashCommands: string[];
   plugins: Plugin[];
-}
-
-/**
- * Ensure the data directory exists
- */
-function ensureDataDir(): void {
-  if (!existsSync(DATA_DIR)) {
-    mkdirSync(DATA_DIR, { recursive: true });
-  }
 }
 
 /**
