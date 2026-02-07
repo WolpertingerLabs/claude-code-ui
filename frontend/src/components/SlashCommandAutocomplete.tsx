@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo } from "react";
 
 interface Props {
   slashCommands: string[];
@@ -9,12 +9,12 @@ interface Props {
 
 export default function SlashCommandAutocomplete({ slashCommands, query, onSelect, visible }: Props) {
   const filteredCommands = useMemo(() => {
-    if (!query || !query.startsWith('/')) return [];
+    if (!query || !query.startsWith("/")) return [];
 
     const searchTerm = query.slice(1).toLowerCase(); // Remove the '/' prefix
 
     return slashCommands
-      .filter(cmd => cmd.toLowerCase().includes(searchTerm))
+      .filter((cmd) => cmd.toLowerCase().includes(searchTerm))
       .sort((a, b) => {
         // Prioritize commands that start with the search term
         const aStartsWith = a.toLowerCase().startsWith(searchTerm);
@@ -34,27 +34,31 @@ export default function SlashCommandAutocomplete({ slashCommands, query, onSelec
   }
 
   return (
-    <div style={{
-      position: 'absolute',
-      bottom: '100%',
-      left: 0,
-      right: 0,
-      background: 'var(--surface)',
-      border: '1px solid var(--border)',
-      borderRadius: '8px',
-      marginBottom: '8px',
-      maxHeight: '200px',
-      overflowY: 'auto',
-      zIndex: 1000,
-      boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-    }}>
-      <div style={{
-        padding: '6px 12px',
-        fontSize: 11,
-        color: 'var(--text-muted)',
-        borderBottom: '1px solid var(--border)',
-        fontWeight: 600,
-      }}>
+    <div
+      style={{
+        position: "absolute",
+        bottom: "100%",
+        left: 0,
+        right: 0,
+        background: "var(--surface)",
+        border: "1px solid var(--border)",
+        borderRadius: "8px",
+        marginBottom: "8px",
+        maxHeight: "200px",
+        overflowY: "auto",
+        zIndex: 1000,
+        boxShadow: "0 4px 12px rgba(0, 0, 0, 0.15)",
+      }}
+    >
+      <div
+        style={{
+          padding: "6px 12px",
+          fontSize: 11,
+          color: "var(--text-muted)",
+          borderBottom: "1px solid var(--border)",
+          fontWeight: 600,
+        }}
+      >
         Available Commands ({filteredCommands.length})
       </div>
 
@@ -63,44 +67,50 @@ export default function SlashCommandAutocomplete({ slashCommands, query, onSelec
           key={command}
           onClick={() => onSelect(command)}
           style={{
-            width: '100%',
-            padding: '8px 12px',
-            background: 'transparent',
-            border: 'none',
-            textAlign: 'left' as const,
+            width: "100%",
+            padding: "8px 12px",
+            background: "transparent",
+            border: "none",
+            textAlign: "left" as const,
             fontSize: 14,
-            color: 'var(--text)',
-            cursor: 'pointer',
-            borderBottom: index < filteredCommands.length - 1 ? '1px solid var(--border)' : 'none',
-            transition: 'background 0.1s ease',
+            color: "var(--text)",
+            cursor: "pointer",
+            borderBottom: index < filteredCommands.length - 1 ? "1px solid var(--border)" : "none",
+            transition: "background 0.1s ease",
           }}
           onMouseEnter={(e) => {
-            e.currentTarget.style.background = 'var(--accent-bg, rgba(59, 130, 246, 0.1))';
+            e.currentTarget.style.background = "var(--accent-bg, rgba(59, 130, 246, 0.1))";
           }}
           onMouseLeave={(e) => {
-            e.currentTarget.style.background = 'transparent';
+            e.currentTarget.style.background = "transparent";
           }}
         >
-          <div style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-          }}>
-            <code style={{
-              background: 'var(--bg-secondary)',
-              padding: '2px 6px',
-              borderRadius: '4px',
-              fontSize: 13,
-              fontFamily: 'var(--font-mono)',
-              color: 'var(--accent)',
-            }}>
+          <div
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+            }}
+          >
+            <code
+              style={{
+                background: "var(--bg-secondary)",
+                padding: "2px 6px",
+                borderRadius: "4px",
+                fontSize: 13,
+                fontFamily: "var(--font-mono)",
+                color: "var(--accent)",
+              }}
+            >
               {command}
             </code>
             {getCommandDescription(command) && (
-              <span style={{
-                fontSize: 12,
-                color: 'var(--text-muted)',
-              }}>
+              <span
+                style={{
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                }}
+              >
                 {getCommandDescription(command)}
               </span>
             )}
@@ -114,11 +124,10 @@ export default function SlashCommandAutocomplete({ slashCommands, query, onSelec
 // Helper function to provide descriptions for common commands
 function getCommandDescription(command: string): string | null {
   const descriptions: Record<string, string> = {
-    '/help': 'Show help information',
-    '/clear': 'Clear the conversation',
-    '/compact': 'Switch to compact view',
-    '/gsr': 'Git save and reboot production',
-    '/model': 'Change AI model',
+    "/help": "Show help information",
+    "/clear": "Clear the conversation",
+    "/compact": "Switch to compact view",
+    "/model": "Change AI model",
   };
 
   return descriptions[command] || null;
