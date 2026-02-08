@@ -13,6 +13,7 @@
     "dev:frontend": "npm -w claude-code-ui-frontend run dev",
     "swagger": "tsx backend/src/swagger.ts",
     "prebuild": "npm run swagger",
+    "clean": "rm -rf shared/dist backend/dist frontend/dist shared/tsconfig.tsbuildinfo backend/tsconfig.tsbuildinfo frontend/tsconfig.tsbuildinfo",
     "build": "npm run build:shared && npm run build:backend && npm run build:frontend",
     "build:shared": "npm -w shared run build",
     "build:backend": "npm -w claude-code-ui-backend run build",
