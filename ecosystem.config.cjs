@@ -3,7 +3,7 @@ module.exports = {
   apps: [
     {
       name: "claude-code-ui",
-      script: "backend/dist/backend/src/index.js",
+      script: "backend/dist/index.js",
       cwd: __dirname,
       instances: 1,
       autorestart: true,

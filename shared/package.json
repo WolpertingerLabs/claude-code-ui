@@ -2,7 +2,26 @@
   "name": "shared",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc -b"
+  },
   "exports": {
-    "./types/*": "./types/*"
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    },
+    "./types/*.js": {
+      "types": "./dist/*.d.ts",
+      "default": "./dist/*.js"
+    },
+    "./types/*": {
+      "types": "./dist/*",
+      "default": "./dist/*"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "types/*": ["dist/*"]
+    }
   }
 }
