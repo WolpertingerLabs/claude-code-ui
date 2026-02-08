@@ -1,8 +1,6 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
-import { appendFileSync, mkdirSync } from "fs";
-import { join } from "path";
 import { chatFileService } from "./chat-file-service.js";
 import { setSlashCommandsForDirectory } from "./slashCommands.js";
 import type { DefaultPermissions } from "shared/types/index.js";
@@ -11,23 +9,6 @@ import { migratePermissions } from "shared/types/index.js";
 import { getPluginsForDirectory, type Plugin } from "./plugins.js";
 
 export type { StreamEvent };
-
-const isDebug = process.env.NODE_ENV !== "production";
-let debugLogFile: string | null = null;
-
-if (isDebug) {
-  const logDir = join(process.cwd(), "logs");
-  mkdirSync(logDir, { recursive: true });
-  debugLogFile = join(logDir, "slash-commands-debug.log");
-}
-
-function logDebug(message: string, data?: any) {
-  if (!isDebug) return;
-  const timestamp = new Date().toISOString();
-  const logEntry = data ? `[${timestamp}] ${message}\n${JSON.stringify(data, null, 2)}\n\n` : `[${timestamp}] ${message}\n\n`;
-  console.log(`[SLASH-DEBUG] ${message}`, data || "");
-  if (debugLogFile) appendFileSync(debugLogFile, logEntry);
-}
 
 interface PendingRequest {
   toolName: string;
@@ -379,8 +360,6 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
     try {
       let sessionId: string | null = null;
 
-      logDebug("Starting chat session", { trackingId, isNewChat, cwd: folder });
-
       const conversation = query(queryOpts);
 
       for await (const message of conversation) {
@@ -388,10 +367,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
 
         // Capture slash commands from system initialization message
         if ("slash_commands" in message && message.slash_commands) {
-          const slashCommands = message.slash_commands as string[];
-          logDebug("Found slash commands in SDK message", slashCommands);
-          setSlashCommandsForDirectory(folder, slashCommands);
-          logDebug("Updated slash commands for directory", { trackingId, folder, slashCommands });
+          setSlashCommandsForDirectory(folder, message.slash_commands as string[]);
         }
 
         // Handle session_id arrival

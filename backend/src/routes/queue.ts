@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { queueFileService } from "../services/queue-file-service.js";
-import { sendMessage, type StreamEvent } from "../services/claude.js";
+import { sendMessage } from "../services/claude.js";
 
 export const queueRouter = Router();
 
@@ -121,8 +121,9 @@ queueRouter.post("/:id/execute-now", async (req, res) => {
     // Delete the draft before executing
     queueFileService.deleteQueueItem(req.params.id);
 
-    // Call the service layer directly to send the message
-    const emitter = await sendMessage(
+    // Kick off the message but don't wait for completion — the user can
+    // navigate to the chat and connect to the active session via /stream.
+    await sendMessage(
       queueItem.chat_id
         ? { chatId: queueItem.chat_id, prompt: queueItem.user_message }
         : {
@@ -132,21 +133,7 @@ queueRouter.post("/:id/execute-now", async (req, res) => {
           },
     );
 
-    // Wait for the session to complete or error
-    await new Promise<void>((resolve, reject) => {
-      const onEvent = (event: StreamEvent) => {
-        if (event.type === "done") {
-          emitter.removeListener("event", onEvent);
-          resolve();
-        } else if (event.type === "error") {
-          emitter.removeListener("event", onEvent);
-          reject(new Error(event.content || "Unknown stream error"));
-        }
-      };
-      emitter.on("event", onEvent);
-    });
-
-    res.json({ success: true, message: "Message executed successfully" });
+    res.json({ success: true, message: "Message execution started" });
   } catch (error: any) {
     res.status(500).json({ error: error.message });
   }
