@@ -349,8 +349,6 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
       ...(activePlugins ? { plugins: buildPluginOptions(folder, activePlugins) } : {}),
       env: {
         ...process.env,
-        PATH: process.env.PATH,
-        NODE_PATH: process.env.NODE_PATH,
       },
       canUseTool: buildCanUseTool(emitter, getDefaultPermissions, () => trackingId),
     },
