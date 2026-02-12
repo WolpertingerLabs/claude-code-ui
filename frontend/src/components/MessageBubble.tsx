@@ -181,28 +181,6 @@ interface Props {
   teamColorMap?: Map<string, number>;
 }
 
-/** "claude-opus-4-6" → "Opus 4.6", "claude-sonnet-4-5-20250929" → "Sonnet 4.5" */
-function formatModelName(model: string): string {
-  // Strip "claude-" prefix
-  const withoutPrefix = model.replace(/^claude-/, "");
-  // Split on hyphens
-  const parts = withoutPrefix.split("-");
-  if (parts.length === 0) return model;
-  // Capitalize model family name
-  const name = parts[0].charAt(0).toUpperCase() + parts[0].slice(1);
-  // Collect version digits (stop at first non-single-digit part, which is likely a date suffix)
-  const versionParts: string[] = [];
-  for (let i = 1; i < parts.length; i++) {
-    if (/^\d{1,2}$/.test(parts[i])) {
-      versionParts.push(parts[i]);
-    } else {
-      break;
-    }
-  }
-  const version = versionParts.join(".");
-  return version ? `${name} ${version}` : name;
-}
-
 /** Format usage object into a readable string */
 function formatUsage(usage: NonNullable<ParsedMessage["usage"]>): string {
   const parts: string[] = [];
@@ -219,7 +197,7 @@ export function MessageMetadata({ message, align = "right" }: { message: ParsedM
 
   if (!relativeTime) return null;
 
-  const displayModel = message.model ? formatModelName(message.model) : null;
+  const displayModel = message.model || null;
   const hasDetails = !!(message.gitBranch || message.usage || message.serviceTier);
 
   return (
