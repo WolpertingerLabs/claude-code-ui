@@ -280,8 +280,10 @@ interface SendMessageOptions {
   activePlugins?: string[];
   /** For existing chats: the chat ID to continue */
   chatId?: string;
-  /** For new chats: the working directory */
+  /** For new chats: the working directory (used as cwd for the SDK) */
   folder?: string;
+  /** For new chats: resolved folder for storage/display (e.g. main repo path when folder is a worktree). Defaults to folder. */
+  displayFolder?: string;
   /** For new chats: initial permission settings */
   defaultPermissions?: DefaultPermissions;
   /** Maximum number of agent turns before stopping (default: 200) */
@@ -299,7 +301,8 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
   const isNewChat = !opts.chatId;
 
   // Resolve chat context: existing chat or new chat setup
-  let folder: string;
+  let folder: string; // Working directory for the SDK (may be a worktree)
+  let storageFolder: string; // Folder stored in chat record (resolved to main repo)
   let resumeSessionId: string | undefined;
   let initialMetadata: Record<string, any>;
 
@@ -308,12 +311,14 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
     const chat = chatFileService.getChat(opts.chatId);
     if (!chat) throw new Error("Chat not found");
     folder = chat.folder;
+    storageFolder = chat.folder;
     resumeSessionId = chat.session_id;
     initialMetadata = JSON.parse(chat.metadata || "{}");
     stopSession(opts.chatId);
   } else if (opts.folder) {
     // New chat flow
     folder = opts.folder;
+    storageFolder = opts.displayFolder || opts.folder;
     resumeSessionId = undefined;
     initialMetadata = {
       ...(defaultPermissions && { defaultPermissions }),
@@ -396,7 +401,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
           if (isNewChat) {
             // New chat: create the chat record and migrate tracking from temp ID to real chat ID
             const meta = { ...initialMetadata, session_ids: [sessionId] };
-            const chat = chatFileService.upsertChat(sessionId, folder, sessionId, {
+            const chat = chatFileService.upsertChat(sessionId, storageFolder, sessionId, {
               metadata: JSON.stringify(meta),
             });
 
@@ -423,7 +428,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
             const ids: string[] = initialMetadata.session_ids || [];
             if (!ids.includes(sessionId)) ids.push(sessionId);
             initialMetadata.session_ids = ids;
-            chatFileService.upsertChat(trackingId, folder, sessionId, {
+            chatFileService.upsertChat(trackingId, storageFolder, sessionId, {
               metadata: JSON.stringify(initialMetadata),
             });
           }

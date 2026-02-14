@@ -2,6 +2,7 @@ import { readdirSync, statSync, existsSync } from "fs";
 import { join, dirname, resolve, basename } from "path";
 import { homedir } from "os";
 import { CLAUDE_PROJECTS_DIR, projectDirToFolder } from "../utils/paths.js";
+import { resolveWorktreeToMainRepoCached } from "../utils/git.js";
 import type { FolderItem, BrowseResult, ValidateResult, FolderSuggestion } from "shared/types/index.js";
 
 export type { FolderItem, BrowseResult, ValidateResult, FolderSuggestion };
@@ -184,7 +185,9 @@ export class FolderService {
           continue;
         }
 
-        const folder = projectDirToFolder(dir);
+        const rawFolder = projectDirToFolder(dir);
+        // Resolve worktree paths to the main repo so they merge with the parent
+        const { mainRepoPath: folder } = resolveWorktreeToMainRepoCached(rawFolder);
 
         // Skip directories that no longer exist
         if (!existsSync(folder)) continue;

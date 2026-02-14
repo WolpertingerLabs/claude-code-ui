@@ -4,7 +4,7 @@ import { loadImageBuffers } from "../services/image-storage.js";
 import { storeMessageImages } from "../services/image-metadata.js";
 import { statSync, existsSync, readdirSync, watchFile, unwatchFile, openSync, readSync, closeSync } from "fs";
 import { join } from "path";
-import { ensureWorktree, switchBranch } from "../utils/git.js";
+import { ensureWorktree, switchBranch, resolveWorktreeToMainRepoCached } from "../utils/git.js";
 import { findSessionLogPath } from "../utils/session-log.js";
 import { findChatForStatus } from "../utils/chat-lookup.js";
 import { writeSSEHeaders, sendSSE, createSSEHandler } from "../utils/sse.js";
@@ -82,10 +82,13 @@ streamRouter.post("/new/message", async (req, res) => {
 
   try {
     const imageMetadata = imageIds?.length ? loadImageBuffers(imageIds) : [];
+    // Resolve worktree path to main repo for storage/display
+    const { mainRepoPath } = resolveWorktreeToMainRepoCached(effectiveFolder);
 
     const emitter = await sendMessage({
       prompt,
       folder: effectiveFolder,
+      displayFolder: mainRepoPath,
       defaultPermissions,
       imageMetadata: imageMetadata.length > 0 ? imageMetadata : undefined,
       activePlugins,

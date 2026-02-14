@@ -1,7 +1,7 @@
 import { statSync } from "fs";
 import { join } from "path";
 import { chatFileService } from "../services/chat-file-service.js";
-import { getGitInfo } from "./git.js";
+import { getGitInfo, resolveWorktreeToMainRepoCached } from "./git.js";
 import { projectDirToFolder } from "./paths.js";
 import { findSessionLogPath } from "./session-log.js";
 
@@ -24,14 +24,18 @@ export function findChat(id: string, includeGitInfo: boolean = true): any | null
 
     if (fileChat) {
       const logPath = findSessionLogPath(fileChat.session_id);
+      // Use original folder for git info (correct branch for worktrees)
       let gitInfo: { isGitRepo: boolean; branch?: string } = { isGitRepo: false };
       if (includeGitInfo) {
         try {
           gitInfo = getGitInfo(fileChat.folder);
         } catch {}
       }
+      // Resolve worktree paths to main repo for display
+      const { mainRepoPath } = resolveWorktreeToMainRepoCached(fileChat.folder);
       return {
         ...fileChat,
+        folder: mainRepoPath,
         session_log_path: logPath,
         ...(includeGitInfo && {
           is_git_repo: gitInfo.isGitRepo,
@@ -47,17 +51,20 @@ export function findChat(id: string, includeGitInfo: boolean = true): any | null
     const projectDir = join(logPath, "..");
     const dirName = projectDir.split("/").pop()!;
     const st = statSync(logPath);
-    const folder = projectDirToFolder(dirName);
+    const originalFolder = projectDirToFolder(dirName);
+    // Use original folder for git info (correct branch for worktrees)
     let gitInfo: { isGitRepo: boolean; branch?: string } = { isGitRepo: false };
     if (includeGitInfo) {
       try {
-        gitInfo = getGitInfo(folder);
+        gitInfo = getGitInfo(originalFolder);
       } catch {}
     }
+    // Resolve worktree paths to main repo for display
+    const { mainRepoPath } = resolveWorktreeToMainRepoCached(originalFolder);
 
     return {
       id,
-      folder,
+      folder: mainRepoPath,
       session_id: id,
       session_log_path: logPath,
       metadata: JSON.stringify({ session_ids: [id] }),
