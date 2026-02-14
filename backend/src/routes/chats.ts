@@ -4,7 +4,7 @@ import { execSync } from "child_process";
 import { join } from "path";
 import { chatFileService } from "../services/chat-file-service.js";
 import { getCommandsAndPluginsForDirectory, getAllCommandsForDirectory } from "../services/slashCommands.js";
-import { getGitInfo } from "../utils/git.js";
+import { getGitInfo, resolveWorktreeToMainRepoCached } from "../utils/git.js";
 import { CLAUDE_PROJECTS_DIR, projectDirToFolder } from "../utils/paths.js";
 import { findSessionLogPath, findSubagentFiles } from "../utils/session-log.js";
 import { findChat } from "../utils/chat-lookup.js";
@@ -75,7 +75,7 @@ function discoverSessionsPaginated(
   limit: number,
   offset: number,
 ): {
-  sessions: { sessionId: string; folder: string; filePath: string; createdAt: Date; updatedAt: Date }[];
+  sessions: { sessionId: string; folder: string; originalFolder: string; filePath: string; createdAt: Date; updatedAt: Date }[];
   total: number;
 } {
   if (!existsSync(CLAUDE_PROJECTS_DIR)) return { sessions: [], total: 0 };
@@ -111,7 +111,7 @@ function discoverSessionsPaginated(
 
     // Only process the files we need for this page (already sorted by ls -t)
     const pageFiles = filePathsFromLs.slice(offset, offset + limit);
-    const results: { sessionId: string; folder: string; filePath: string; createdAt: Date; updatedAt: Date }[] = [];
+    const results: { sessionId: string; folder: string; originalFolder: string; filePath: string; createdAt: Date; updatedAt: Date }[] = [];
 
     // Only call statSync on the paginated files we actually need
     for (const filePath of pageFiles) {
@@ -122,13 +122,16 @@ function discoverSessionsPaginated(
         const projectDir = filePath.split("/").slice(0, -1).pop();
         if (!projectDir) continue;
 
-        const folder = projectDirToFolder(projectDir);
+        const originalFolder = projectDirToFolder(projectDir);
+        // Resolve worktree paths to the main repo for display/grouping
+        const { mainRepoPath } = resolveWorktreeToMainRepoCached(originalFolder);
 
         // Get timestamps only for paginated files (much faster than all files)
         const st = statSync(filePath);
         results.push({
           sessionId,
-          folder,
+          folder: mainRepoPath,
+          originalFolder,
           filePath,
           createdAt: st.birthtime,
           updatedAt: st.mtime,
@@ -153,10 +156,10 @@ function discoverAllSessionsFallback(
   limit?: number,
   offset?: number,
 ): {
-  sessions: { sessionId: string; folder: string; filePath: string; createdAt: Date; updatedAt: Date }[];
+  sessions: { sessionId: string; folder: string; originalFolder: string; filePath: string; createdAt: Date; updatedAt: Date }[];
   total: number;
 } {
-  const results: { sessionId: string; folder: string; filePath: string; createdAt: Date; updatedAt: Date }[] = [];
+  const results: { sessionId: string; folder: string; originalFolder: string; filePath: string; createdAt: Date; updatedAt: Date }[] = [];
   for (const dir of readdirSync(CLAUDE_PROJECTS_DIR)) {
     const dirPath = join(CLAUDE_PROJECTS_DIR, dir);
     try {
@@ -165,14 +168,15 @@ function discoverAllSessionsFallback(
     } catch {
       continue;
     }
-    const folder = projectDirToFolder(dir);
+    const originalFolder = projectDirToFolder(dir);
+    const { mainRepoPath } = resolveWorktreeToMainRepoCached(originalFolder);
     for (const file of readdirSync(dirPath)) {
       if (!file.endsWith(".jsonl")) continue;
       const sessionId = file.replace(".jsonl", "");
       const filePath = join(dirPath, file);
       try {
         const st = statSync(filePath);
-        results.push({ sessionId, folder, filePath, createdAt: st.birthtime, updatedAt: st.mtime });
+        results.push({ sessionId, folder: mainRepoPath, originalFolder, filePath, createdAt: st.birthtime, updatedAt: st.mtime });
       } catch {
         continue;
       }
@@ -238,8 +242,8 @@ chatsRouter.get("/", (req, res) => {
       // Try to find by session ID (may not exist in file storage - that's fine)
       const fileChat = fileChatsBySessionId.get(s.sessionId);
 
-      // Get cached git info for the folder (with fallback)
-      const gitInfo = getCachedGitInfo(s.folder);
+      // Get cached git info using the original folder (may be a worktree) for correct branch
+      const gitInfo = getCachedGitInfo(s.originalFolder);
 
       // Extract preview from the first user message in the JSONL file
       const preview = getFirstUserMessage(s.filePath);
@@ -248,6 +252,8 @@ chatsRouter.get("/", (req, res) => {
         // Augment with file storage data while keeping filesystem as source of truth for timestamps
         return {
           ...fileChat,
+          // Use resolved folder (worktree paths → main repo)
+          folder: s.folder,
           // Keep filesystem timestamps as they're more accurate for actual activity
           created_at: s.createdAt.toISOString(),
           updated_at: s.updatedAt.toISOString(),
@@ -320,8 +326,11 @@ chatsRouter.get("/new/info", (req, res) => {
     return res.status(400).json({ error: "folder does not exist" });
   }
 
-  // Get cached git info for the folder
-  const gitInfo = getCachedGitInfo(folder);
+  // Always fetch fresh git info for new chats so the branch is up-to-date
+  let gitInfo: { isGitRepo: boolean; branch?: string } = { isGitRepo: false };
+  try {
+    gitInfo = getGitInfo(folder);
+  } catch {}
 
   // Get slash commands and plugins for the folder
   let slashCommands: any[] = [];

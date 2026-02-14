@@ -1,5 +1,5 @@
 import { execSync, execFileSync } from "child_process";
-import { existsSync, statSync, readFileSync, readdirSync } from "fs";
+import { existsSync, statSync, lstatSync, readFileSync, readdirSync } from "fs";
 import { join, dirname, basename, resolve, extname, relative } from "path";
 import type { DiffFileEntry, DiffFileType } from "shared/types/index.js";
 
@@ -124,6 +124,92 @@ export function getGitInfo(directory: string): GitInfo {
     // Any other error (permissions, etc.)
     return { isGitRepo: false };
   }
+}
+
+export interface WorktreeResolution {
+  mainRepoPath: string;
+  isWorktree: boolean;
+}
+
+/**
+ * Detect if a directory is a git worktree and resolve it to the main repository path.
+ *
+ * A worktree directory has a `.git` **file** (not directory) containing a line like:
+ *   gitdir: /path/to/main-repo/.git/worktrees/<name>
+ *
+ * We parse this to navigate back to the main repo. This avoids spawning any
+ * `git` subprocess — it's pure filesystem reads, safe to call per-session.
+ *
+ * Git submodules also have a `.git` file, but it points to `../.git/modules/<name>`,
+ * not `.git/worktrees/<name>`, so they correctly return `isWorktree: false`.
+ */
+export function resolveWorktreeToMainRepo(folder: string): WorktreeResolution {
+  if (!folder) return { mainRepoPath: folder, isWorktree: false };
+
+  const gitPath = join(folder, ".git");
+  if (!existsSync(gitPath)) {
+    return { mainRepoPath: folder, isWorktree: false };
+  }
+
+  try {
+    const stat = lstatSync(gitPath);
+
+    if (stat.isDirectory()) {
+      // Normal git repo (not a worktree)
+      return { mainRepoPath: folder, isWorktree: false };
+    }
+
+    if (stat.isFile()) {
+      // Worktree: .git is a file containing "gitdir: <path>"
+      const content = readFileSync(gitPath, "utf-8").trim();
+      const match = content.match(/^gitdir:\s*(.+)$/m);
+      if (!match) {
+        return { mainRepoPath: folder, isWorktree: false };
+      }
+
+      // Resolve relative paths (gitdir can be relative to the worktree)
+      const resolvedGitdir = resolve(folder, match[1]);
+
+      // Expected format: /path/to/main-repo/.git/worktrees/<name>
+      const worktreesDir = dirname(resolvedGitdir);
+      if (basename(worktreesDir) !== "worktrees") {
+        return { mainRepoPath: folder, isWorktree: false };
+      }
+
+      const dotGitDir = dirname(worktreesDir);
+      if (basename(dotGitDir) !== ".git") {
+        return { mainRepoPath: folder, isWorktree: false };
+      }
+
+      const mainRepoPath = dirname(dotGitDir);
+      if (existsSync(mainRepoPath)) {
+        return { mainRepoPath, isWorktree: true };
+      }
+    }
+  } catch {
+    // Fall through on any error
+  }
+
+  return { mainRepoPath: folder, isWorktree: false };
+}
+
+// Cache for worktree resolution to avoid repeated filesystem reads
+const worktreeResolutionCache = new Map<string, { result: WorktreeResolution; cachedAt: number }>();
+const WORKTREE_CACHE_TTL = 300000; // 5 minutes
+
+/**
+ * Cached wrapper around resolveWorktreeToMainRepo.
+ * Safe to call per-session in hot paths like paginated chat discovery.
+ */
+export function resolveWorktreeToMainRepoCached(folder: string): WorktreeResolution {
+  const cached = worktreeResolutionCache.get(folder);
+  const now = Date.now();
+  if (cached && now - cached.cachedAt < WORKTREE_CACHE_TTL) {
+    return cached.result;
+  }
+  const result = resolveWorktreeToMainRepo(folder);
+  worktreeResolutionCache.set(folder, { result, cachedAt: now });
+  return result;
 }
 
 /**
