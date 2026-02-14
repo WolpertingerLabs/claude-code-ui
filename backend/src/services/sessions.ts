@@ -70,6 +70,15 @@ export function createSession(token: string, expiresAt: number, ip?: string): vo
   saveSessions(data);
 }
 
+export function extendSession(token: string, newExpiresAt: number): void {
+  const data = loadSessions();
+  const session = data.sessions[token];
+  if (session) {
+    session.expires_at = newExpiresAt;
+    saveSessions(data);
+  }
+}
+
 export function deleteSession(token: string): void {
   const data = loadSessions();
   delete data.sessions[token];
