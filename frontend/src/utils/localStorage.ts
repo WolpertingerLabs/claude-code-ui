@@ -14,6 +14,7 @@ interface LocalStorageData {
   defaultPermissions?: DefaultPermissions;
   recentDirectories?: RecentDirectory[];
   maxTurns?: number;
+  useWorktree?: boolean;
 }
 
 const DEFAULT_PERMISSIONS: DefaultPermissions = {
@@ -91,6 +92,17 @@ export function removeRecentDirectory(path: string): void {
   const existing = data.recentDirectories || [];
 
   data.recentDirectories = existing.filter((dir) => dir.path !== path);
+  setStorageData(data);
+}
+
+export function getUseWorktree(): boolean {
+  const data = getStorageData();
+  return data.useWorktree ?? false;
+}
+
+export function saveUseWorktree(value: boolean): void {
+  const data = getStorageData();
+  data.useWorktree = value;
   setStorageData(data);
 }
 
