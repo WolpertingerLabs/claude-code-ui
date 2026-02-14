@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
-import { GitBranch, ChevronDown, ChevronUp } from "lucide-react";
+import { GitBranch, GitFork } from "lucide-react";
 import { getGitBranches, type BranchConfig } from "../api";
+import { getUseWorktree, saveUseWorktree } from "../utils/localStorage";
 
 /**
  * Validate a git branch name according to git-check-ref-format rules.
@@ -33,8 +34,7 @@ export default function BranchSelector({ folder, currentBranch, onChange }: Bran
 
   const [baseBranch, setBaseBranch] = useState(currentBranch);
   const [newBranch, setNewBranch] = useState("");
-  const [useWorktree, setUseWorktree] = useState(false);
-  const [expanded, setExpanded] = useState(false);
+  const [useWorktree, setUseWorktree] = useState(() => getUseWorktree());
 
   // Fetch branches on mount
   useEffect(() => {
@@ -90,6 +90,12 @@ export default function BranchSelector({ folder, currentBranch, onChange }: Bran
     propagateChange(baseBranch, newBranch, useWorktree);
   }, [baseBranch, newBranch, useWorktree, propagateChange, branchError]);
 
+  // Persist worktree preference
+  const handleWorktreeChange = useCallback((checked: boolean) => {
+    setUseWorktree(checked);
+    saveUseWorktree(checked);
+  }, []);
+
   // Compute worktree path preview (mirrors backend ensureWorktree in git.ts)
   const effectiveBranch = newBranch.trim() || baseBranch;
   const sanitized = effectiveBranch.replace(/\//g, "-");
@@ -99,200 +105,143 @@ export default function BranchSelector({ folder, currentBranch, onChange }: Bran
   const parentDir = lastSlash >= 0 ? trimmedFolder.slice(0, lastSlash) : "";
   const worktreePath = `${parentDir}/${repoName}.${sanitized}`;
 
-  // Determine display label for collapsed state
   const hasChanges = baseBranch !== currentBranch || newBranch.trim() || useWorktree;
-  const displayLabel = newBranch.trim() ? `${newBranch.trim()} (new from ${baseBranch})` : baseBranch;
 
   return (
     <div
       style={{
         background: "var(--bg-secondary)",
-        borderRadius: 12,
-        padding: expanded ? "16px 20px" : "10px 16px",
-        marginBottom: 16,
+        borderRadius: 10,
+        padding: "10px 14px",
+        marginBottom: 8,
         border: hasChanges ? "1px solid var(--accent)" : "1px solid transparent",
-        transition: "all 0.2s ease",
+        transition: "border-color 0.2s ease",
       }}
     >
-      {/* Header / collapsed view */}
-      <button
-        onClick={() => setExpanded(!expanded)}
+      {/* Single-row inline layout: base branch | new branch | worktree */}
+      <div
         style={{
           display: "flex",
           alignItems: "center",
-          gap: 8,
-          width: "100%",
-          background: "none",
-          border: "none",
-          cursor: "pointer",
-          padding: 0,
-          color: "var(--text)",
+          gap: 10,
+          flexWrap: "wrap",
         }}
       >
-        <GitBranch size={14} style={{ color: "var(--accent)", flexShrink: 0 }} />
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 500,
-            flex: 1,
-            textAlign: "left",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            whiteSpace: "nowrap",
-          }}
-        >
-          {displayLabel}
-        </span>
-        {useWorktree && (
-          <span
-            style={{
-              fontSize: 10,
-              color: "#fff",
-              background: "var(--accent)",
-              padding: "2px 6px",
-              borderRadius: 4,
-              fontWeight: 500,
-              flexShrink: 0,
-            }}
-          >
-            worktree
-          </span>
-        )}
-        <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>
-          {expanded ? (
-            <>
-              Hide <ChevronUp size={12} style={{ verticalAlign: "middle" }} />
-            </>
+        {/* Base Branch */}
+        <div style={{ display: "flex", alignItems: "center", gap: 6, minWidth: 0 }}>
+          <GitBranch size={13} style={{ color: "var(--accent)", flexShrink: 0 }} />
+          {loading ? (
+            <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading...</span>
+          ) : error ? (
+            <span style={{ fontSize: 12, color: "var(--danger, #ef4444)" }}>{error}</span>
           ) : (
-            <>
-              Configure <ChevronDown size={12} style={{ verticalAlign: "middle" }} />
-            </>
-          )}
-        </span>
-      </button>
-
-      {/* Expanded controls */}
-      {expanded && (
-        <div style={{ marginTop: 14, display: "flex", flexDirection: "column", gap: 12 }}>
-          {/* Base Branch */}
-          <div>
-            <label
+            <select
+              value={baseBranch}
+              onChange={(e) => setBaseBranch(e.target.value)}
               style={{
-                display: "block",
-                fontSize: 12,
-                color: "var(--text-muted)",
-                marginBottom: 4,
-                fontWeight: 500,
-              }}
-            >
-              Base Branch
-            </label>
-            {loading ? (
-              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>Loading branches...</span>
-            ) : error ? (
-              <span style={{ fontSize: 12, color: "var(--danger, #ef4444)" }}>{error}</span>
-            ) : (
-              <select
-                value={baseBranch}
-                onChange={(e) => setBaseBranch(e.target.value)}
-                style={{
-                  width: "100%",
-                  background: "var(--bg)",
-                  color: "var(--text)",
-                  border: "1px solid var(--border)",
-                  borderRadius: 6,
-                  padding: "6px 10px",
-                  fontSize: 13,
-                  fontFamily: "monospace",
-                  cursor: "pointer",
-                  outline: "none",
-                }}
-              >
-                {branches.map((branch) => (
-                  <option key={branch} value={branch}>
-                    {branch}
-                    {branch === currentBranch ? " (current)" : ""}
-                  </option>
-                ))}
-              </select>
-            )}
-          </div>
-
-          {/* New Branch */}
-          <div>
-            <label
-              style={{
-                display: "block",
-                fontSize: 12,
-                color: "var(--text-muted)",
-                marginBottom: 4,
-                fontWeight: 500,
-              }}
-            >
-              New Branch <span style={{ fontWeight: 400, opacity: 0.7 }}>(optional — extends base)</span>
-            </label>
-            <input
-              type="text"
-              value={newBranch}
-              onChange={(e) => setNewBranch(e.target.value)}
-              placeholder="e.g. feature/my-feature"
-              style={{
-                width: "100%",
                 background: "var(--bg)",
                 color: "var(--text)",
-                border: branchError ? "1px solid var(--danger, #ef4444)" : "1px solid var(--border)",
-                borderRadius: 6,
-                padding: "6px 10px",
-                fontSize: 13,
+                border: "1px solid var(--border)",
+                borderRadius: 5,
+                padding: "4px 8px",
+                fontSize: 12,
                 fontFamily: "monospace",
-                outline: "none",
-                boxSizing: "border-box",
-              }}
-            />
-            {branchError && (
-              <div
-                style={{
-                  marginTop: 4,
-                  fontSize: 11,
-                  color: "var(--danger, #ef4444)",
-                  fontWeight: 500,
-                }}
-              >
-                {branchError}
-              </div>
-            )}
-          </div>
-
-          {/* Use Worktree */}
-          <div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
                 cursor: "pointer",
-                fontSize: 13,
-                color: "var(--text)",
+                outline: "none",
+                maxWidth: 180,
               }}
             >
-              <input type="checkbox" checked={useWorktree} onChange={(e) => setUseWorktree(e.target.checked)} style={{ cursor: "pointer" }} />
-              Use Worktree
-            </label>
-            {useWorktree && (
-              <div
-                style={{
-                  marginTop: 6,
-                  fontSize: 11,
-                  color: "var(--text-muted)",
-                  fontFamily: "monospace",
-                  wordBreak: "break-all",
-                  paddingLeft: 24,
-                }}
-              >
-                → {worktreePath}
-              </div>
-            )}
-          </div>
+              {branches.map((branch) => (
+                <option key={branch} value={branch}>
+                  {branch}
+                  {branch === currentBranch ? " (current)" : ""}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+
+        {/* Separator */}
+        <span style={{ color: "var(--border)", fontSize: 14, userSelect: "none" }}>/</span>
+
+        {/* New Branch */}
+        <div style={{ display: "flex", alignItems: "center", gap: 4, flex: 1, minWidth: 120 }}>
+          <input
+            type="text"
+            value={newBranch}
+            onChange={(e) => setNewBranch(e.target.value)}
+            placeholder="new-branch (optional)"
+            style={{
+              flex: 1,
+              background: "var(--bg)",
+              color: "var(--text)",
+              border: branchError ? "1px solid var(--danger, #ef4444)" : "1px solid var(--border)",
+              borderRadius: 5,
+              padding: "4px 8px",
+              fontSize: 12,
+              fontFamily: "monospace",
+              outline: "none",
+              minWidth: 0,
+              boxSizing: "border-box",
+            }}
+          />
+        </div>
+
+        {/* Worktree toggle */}
+        <label
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 5,
+            cursor: "pointer",
+            fontSize: 12,
+            color: useWorktree ? "var(--accent)" : "var(--text-muted)",
+            flexShrink: 0,
+            userSelect: "none",
+            fontWeight: useWorktree ? 500 : 400,
+            transition: "color 0.15s ease",
+          }}
+        >
+          <input
+            type="checkbox"
+            checked={useWorktree}
+            onChange={(e) => handleWorktreeChange(e.target.checked)}
+            style={{ cursor: "pointer", margin: 0 }}
+          />
+          <GitFork size={12} style={{ flexShrink: 0 }} />
+          Worktree
+        </label>
+      </div>
+
+      {/* Validation error */}
+      {branchError && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: "var(--danger, #ef4444)",
+            fontWeight: 500,
+            paddingLeft: 19,
+          }}
+        >
+          {branchError}
+        </div>
+      )}
+
+      {/* Worktree path preview */}
+      {useWorktree && (
+        <div
+          style={{
+            marginTop: 6,
+            fontSize: 11,
+            color: "var(--text-muted)",
+            fontFamily: "monospace",
+            wordBreak: "break-all",
+            paddingLeft: 19,
+            opacity: 0.8,
+          }}
+        >
+          {worktreePath}
         </div>
       )}
     </div>
