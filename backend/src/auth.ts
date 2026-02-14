@@ -1,6 +1,12 @@
 import { randomBytes } from "crypto";
 import type { Request, Response, NextFunction } from "express";
-import { getSession, createSession, deleteSession, cleanupExpiredSessions } from "./services/sessions.js";
+import {
+  getSession,
+  createSession,
+  deleteSession,
+  extendSession,
+  cleanupExpiredSessions,
+} from "./services/sessions.js";
 
 // Read password lazily so dotenv.config() in index.ts has time to load .env first
 // (ES module imports are hoisted and run before dotenv.config)
@@ -32,6 +38,18 @@ function checkRateLimit(ip: string): boolean {
   if (entry.count >= MAX_ATTEMPTS) return false;
   entry.count++;
   return true;
+}
+
+// Extend (roll) a session: reset both the server-side expiry and the browser cookie
+function rollSession(token: string, res: Response): void {
+  const newExpiry = Date.now() + SESSION_TTL_MS;
+  extendSession(token, newExpiry);
+  res.cookie("session", token, {
+    httpOnly: true,
+    sameSite: "strict",
+    maxAge: SESSION_TTL_MS,
+    path: "/",
+  });
 }
 
 // Session cleanup on startup
@@ -83,6 +101,10 @@ export function checkAuthHandler(req: Request, res: Response) {
     if (entry) deleteSession(token);
     return res.json({ authenticated: false });
   }
+
+  // Auto-extend the session when actively checking auth status
+  rollSession(token, res);
+
   res.json({ authenticated: true });
 }
 
@@ -104,6 +126,9 @@ export function requireAuth(req: Request, res: Response, next: NextFunction) {
     if (entry) deleteSession(token);
     return res.status(401).json({ error: "Session expired" });
   }
+
+  // Auto-extend the session on every authenticated request (rolling session)
+  rollSession(token, res);
 
   next();
 }
