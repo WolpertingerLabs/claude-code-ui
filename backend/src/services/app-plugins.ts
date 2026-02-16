@@ -40,15 +40,28 @@ function loadAppPluginsData(): AppPluginsData {
   ensureDataDir();
 
   if (!existsSync(APP_PLUGINS_FILE)) {
-    return { scanRoots: [], plugins: [], mcpServers: [] };
+    return { scanRoots: [], plugins: [] };
   }
 
   try {
-    const data = readFileSync(APP_PLUGINS_FILE, "utf-8");
-    return JSON.parse(data);
+    const raw = readFileSync(APP_PLUGINS_FILE, "utf-8");
+    const data = JSON.parse(raw);
+
+    // Migration: drop any top-level mcpServers (standalone servers from old format).
+    // After migration, all MCP servers must come from plugins.
+    if (Array.isArray(data.mcpServers) && data.mcpServers.length > 0) {
+      log.info(
+        `Migrating: dropping ${data.mcpServers.length} standalone MCP server(s) from old format. ` +
+          `Re-scan roots to discover them as plugin-embedded servers.`,
+      );
+      delete data.mcpServers;
+      writeFileSync(APP_PLUGINS_FILE, JSON.stringify(data, null, 2));
+    }
+
+    return { scanRoots: data.scanRoots || [], plugins: data.plugins || [] };
   } catch (error) {
     log.warn(`Failed to load app plugins data: ${error}`);
-    return { scanRoots: [], plugins: [], mcpServers: [] };
+    return { scanRoots: [], plugins: [] };
   }
 }
 
@@ -140,13 +153,9 @@ function resolveEnvDefaults(rawEnv: Record<string, string>): {
 
 /**
  * Parse a .mcp.json file and return MCP server configs.
- * Used for both plugin-embedded and standalone .mcp.json discovery.
+ * All MCP servers must belong to a plugin.
  */
-function parseMcpJsonFile(
-  mcpJsonPath: string,
-  sourcePluginId: string | null,
-  scanRoot: string | undefined,
-): McpServerConfig[] {
+function parseMcpJsonFile(mcpJsonPath: string, sourcePluginId: string): McpServerConfig[] {
   try {
     const fileData = readFileSync(mcpJsonPath, "utf-8");
     const mcpConfig = JSON.parse(fileData);
@@ -168,7 +177,7 @@ function parseMcpJsonFile(
         sourcePluginId,
         enabled: true,
         type: "stdio",
-        ...(scanRoot && { scanRoot }),
+        mcpJsonDir: mcpDir,
       };
 
       // Determine server type
@@ -209,7 +218,7 @@ function discoverMcpServers(pluginSourcePath: string, marketplaceDir: string, so
   if (!existsSync(mcpJsonPath)) {
     return [];
   }
-  return parseMcpJsonFile(mcpJsonPath, sourcePluginId, undefined);
+  return parseMcpJsonFile(mcpJsonPath, sourcePluginId);
 }
 
 // ─── Recursive Directory Scanning ──────────────────────────────────────────
@@ -219,23 +228,12 @@ interface DiscoveredMarketplace {
   marketplaceDir: string;
 }
 
-interface DiscoveredMcpFile {
-  mcpJsonPath: string;
-  directory: string;
-}
-
-interface DiscoveredFiles {
-  marketplaces: DiscoveredMarketplace[];
-  mcpFiles: DiscoveredMcpFile[];
-}
-
 /**
- * Recursively scan a directory for .claude-plugin/marketplace.json and .mcp.json files.
+ * Recursively scan a directory for .claude-plugin/marketplace.json files.
  * Uses iterative DFS with an explicit stack to avoid stack overflow.
  */
-function findDiscoverableFiles(rootDir: string): DiscoveredFiles {
+function findMarketplaceFiles(rootDir: string): DiscoveredMarketplace[] {
   const marketplaces: DiscoveredMarketplace[] = [];
-  const mcpFiles: DiscoveredMcpFile[] = [];
   const stack: Array<{ path: string; depth: number }> = [{ path: rootDir, depth: 0 }];
   let dirsVisited = 0;
 
@@ -257,15 +255,6 @@ function findDiscoverableFiles(rootDir: string): DiscoveredFiles {
       marketplaces.push({
         marketplacePath,
         marketplaceDir: currentPath,
-      });
-    }
-
-    // Check for .mcp.json at this level
-    const mcpJsonPath = join(currentPath, ".mcp.json");
-    if (existsSync(mcpJsonPath)) {
-      mcpFiles.push({
-        mcpJsonPath,
-        directory: currentPath,
       });
     }
 
@@ -295,17 +284,15 @@ function findDiscoverableFiles(rootDir: string): DiscoveredFiles {
     }
   }
 
-  log.debug(
-    `Scan of ${rootDir}: visited ${dirsVisited} directories, found ${marketplaces.length} marketplace files, ${mcpFiles.length} .mcp.json files`,
-  );
-  return { marketplaces, mcpFiles };
+  log.debug(`Scan of ${rootDir}: visited ${dirsVisited} directories, found ${marketplaces.length} marketplace files`);
+  return marketplaces;
 }
 
 /**
- * Scan a directory recursively and return all discovered plugins and MCP servers.
- * Discovers both plugin-embedded MCP servers and standalone .mcp.json files.
+ * Scan a directory recursively and return all discovered plugins.
+ * MCP servers are embedded inside the plugins they belong to.
  */
-function scanDirectory(rootDir: string): { plugins: AppPlugin[]; mcpServers: McpServerConfig[] } {
+function scanDirectory(rootDir: string): { plugins: AppPlugin[] } {
   const resolvedRoot = resolve(rootDir);
 
   if (!existsSync(resolvedRoot)) {
@@ -317,13 +304,9 @@ function scanDirectory(rootDir: string): { plugins: AppPlugin[]; mcpServers: Mcp
     throw new Error(`Path is not a directory: ${resolvedRoot}`);
   }
 
-  const { marketplaces, mcpFiles } = findDiscoverableFiles(resolvedRoot);
+  const marketplaces = findMarketplaceFiles(resolvedRoot);
   const plugins: AppPlugin[] = [];
-  const allMcpServers: McpServerConfig[] = [];
   const seenPluginPaths = new Set<string>();
-
-  // Track directories claimed by plugins (to avoid double-counting their .mcp.json)
-  const pluginClaimedDirs = new Set<string>();
 
   for (const { marketplacePath, marketplaceDir } of marketplaces) {
     try {
@@ -340,8 +323,6 @@ function scanDirectory(rootDir: string): { plugins: AppPlugin[]; mcpServers: Mcp
         // Deduplicate by resolved plugin path
         if (seenPluginPaths.has(absolutePluginPath)) continue;
         seenPluginPaths.add(absolutePluginPath);
-
-        pluginClaimedDirs.add(absolutePluginPath);
 
         const pluginId = generateId(absolutePluginPath);
         const commands = discoverPluginCommands(p.source, marketplaceDir);
@@ -365,30 +346,13 @@ function scanDirectory(rootDir: string): { plugins: AppPlugin[]; mcpServers: Mcp
         };
 
         plugins.push(plugin);
-        allMcpServers.push(...mcpServers);
       }
     } catch (error) {
       log.warn(`Failed to parse marketplace.json at ${marketplacePath}: ${error}`);
     }
   }
 
-  // Process standalone .mcp.json files (not already claimed by a plugin)
-  const seenMcpServerIds = new Set(allMcpServers.map((s) => s.id));
-
-  for (const { mcpJsonPath, directory } of mcpFiles) {
-    // Skip .mcp.json files inside directories already claimed by a plugin source
-    if (pluginClaimedDirs.has(directory)) continue;
-
-    const standaloneServers = parseMcpJsonFile(mcpJsonPath, null, resolvedRoot);
-    for (const server of standaloneServers) {
-      if (!seenMcpServerIds.has(server.id)) {
-        seenMcpServerIds.add(server.id);
-        allMcpServers.push(server);
-      }
-    }
-  }
-
-  return { plugins, mcpServers: allMcpServers };
+  return { plugins };
 }
 
 // ─── Public API ────────────────────────────────────────────────────────────
@@ -414,14 +378,15 @@ export function addScanRoot(directory: string): ScanResult {
     return rescanRoot(resolvedDir);
   }
 
-  const { plugins, mcpServers } = scanDirectory(resolvedDir);
+  const { plugins } = scanDirectory(resolvedDir);
+  const mcpServerCount = plugins.reduce((sum, p) => sum + (p.mcpServers?.length || 0), 0);
 
   // Add scan root
   data.scanRoots.push({
     path: resolvedDir,
     lastScanned: new Date().toISOString(),
     pluginCount: plugins.length,
-    mcpServerCount: mcpServers.length,
+    mcpServerCount,
   });
 
   // Add plugins (deduplicate against existing by path)
@@ -432,47 +397,27 @@ export function addScanRoot(directory: string): ScanResult {
     }
   }
 
-  // Add standalone MCP servers (discovered from .mcp.json files outside plugin dirs)
-  const existingServerIds = new Set(data.mcpServers.map((s) => s.id));
-  for (const server of mcpServers) {
-    if (!existingServerIds.has(server.id) && !server.sourcePluginId) {
-      data.mcpServers.push(server);
-      existingServerIds.add(server.id);
-    }
-  }
-
   saveAppPluginsData(data);
 
-  log.info(`Added scan root ${resolvedDir}: ${plugins.length} plugins, ${mcpServers.length} MCP servers`);
+  log.info(`Added scan root ${resolvedDir}: ${plugins.length} plugins, ${mcpServerCount} MCP servers`);
 
   return {
     scanRoot: resolvedDir,
     pluginsFound: plugins.length,
-    mcpServersFound: mcpServers.length,
+    mcpServersFound: mcpServerCount,
     plugins,
-    mcpServers,
   };
 }
 
 /**
- * Remove a scan root and all its associated plugins/MCP servers.
+ * Remove a scan root and all its associated plugins.
  */
 export function removeScanRoot(directory: string): void {
   const resolvedDir = resolve(directory);
   const data = loadAppPluginsData();
 
-  // Collect plugin IDs from this scan root for cascading MCP server removal
-  const pluginIdsToRemove = new Set(data.plugins.filter((p) => p.scanRoot === resolvedDir).map((p) => p.id));
-
   data.scanRoots = data.scanRoots.filter((r) => r.path !== resolvedDir);
   data.plugins = data.plugins.filter((p) => p.scanRoot !== resolvedDir);
-  data.mcpServers = data.mcpServers.filter((s) => {
-    // Remove standalone servers from this scan root
-    if (s.scanRoot === resolvedDir) return false;
-    // Remove servers whose parent plugin is being removed
-    if (s.sourcePluginId && pluginIdsToRemove.has(s.sourcePluginId)) return false;
-    return true;
-  });
 
   saveAppPluginsData(data);
   log.info(`Removed scan root ${resolvedDir}`);
@@ -503,25 +448,11 @@ export function rescanRoot(directory: string): ScanResult {
     }
   }
 
-  // Save standalone MCP server enabled states and env values
-  for (const s of data.mcpServers) {
-    if (s.scanRoot === resolvedDir) {
-      mcpEnabledStates.set(`standalone:${s.name}`, s.enabled);
-      if (s.env) mcpEnvStates.set(`standalone:${s.name}`, s.env);
-    }
-  }
-
   // Remove old entries for this scan root
-  const pluginIdsToRemove = new Set(data.plugins.filter((p) => p.scanRoot === resolvedDir).map((p) => p.id));
   data.plugins = data.plugins.filter((p) => p.scanRoot !== resolvedDir);
-  data.mcpServers = data.mcpServers.filter((s) => {
-    if (s.scanRoot === resolvedDir) return false;
-    if (s.sourcePluginId && pluginIdsToRemove.has(s.sourcePluginId)) return false;
-    return true;
-  });
 
   // Re-scan
-  const { plugins, mcpServers } = scanDirectory(resolvedDir);
+  const { plugins } = scanDirectory(resolvedDir);
 
   // Restore enabled states and user-set env values for plugins and their embedded MCP servers
   for (const plugin of plugins) {
@@ -544,21 +475,6 @@ export function rescanRoot(directory: string): ScanResult {
     }
   }
 
-  // Restore enabled states and env values for standalone MCP servers
-  for (const server of mcpServers) {
-    if (!server.sourcePluginId) {
-      const standaloneKey = `standalone:${server.name}`;
-      const prev = mcpEnabledStates.get(standaloneKey);
-      if (prev !== undefined) {
-        server.enabled = prev;
-      }
-      const prevEnv = mcpEnvStates.get(standaloneKey);
-      if (prevEnv) {
-        server.env = prevEnv;
-      }
-    }
-  }
-
   // Update data — add plugins
   const existingPaths = new Set(data.plugins.map((p) => p.pluginPath));
   for (const plugin of plugins) {
@@ -567,32 +483,23 @@ export function rescanRoot(directory: string): ScanResult {
     }
   }
 
-  // Update data — add standalone MCP servers
-  const existingServerIds = new Set(data.mcpServers.map((s) => s.id));
-  for (const server of mcpServers) {
-    if (!server.sourcePluginId && !existingServerIds.has(server.id)) {
-      data.mcpServers.push(server);
-      existingServerIds.add(server.id);
-    }
-  }
-
   // Update scan root metadata
+  const mcpServerCount = plugins.reduce((sum, p) => sum + (p.mcpServers?.length || 0), 0);
   const rootIdx = data.scanRoots.findIndex((r) => r.path === resolvedDir);
   if (rootIdx >= 0) {
     data.scanRoots[rootIdx].lastScanned = new Date().toISOString();
     data.scanRoots[rootIdx].pluginCount = plugins.length;
-    data.scanRoots[rootIdx].mcpServerCount = mcpServers.length;
+    data.scanRoots[rootIdx].mcpServerCount = mcpServerCount;
   }
 
   saveAppPluginsData(data);
-  log.info(`Rescanned ${resolvedDir}: ${plugins.length} plugins, ${mcpServers.length} MCP servers`);
+  log.info(`Rescanned ${resolvedDir}: ${plugins.length} plugins, ${mcpServerCount} MCP servers`);
 
   return {
     scanRoot: resolvedDir,
     pluginsFound: plugins.length,
-    mcpServersFound: mcpServers.length,
+    mcpServersFound: mcpServerCount,
     plugins,
-    mcpServers,
   };
 }
 
@@ -628,16 +535,10 @@ export function setPluginEnabled(pluginId: string, enabled: boolean): void {
 
   plugin.enabled = enabled;
 
-  // Cascade: if disabling plugin, also disable its MCP servers
+  // Cascade: if disabling plugin, also disable its embedded MCP servers
   if (!enabled && plugin.mcpServers) {
     for (const server of plugin.mcpServers) {
       server.enabled = false;
-    }
-    // Also disable standalone MCP servers linked to this plugin
-    for (const server of data.mcpServers) {
-      if (server.sourcePluginId === pluginId) {
-        server.enabled = false;
-      }
     }
   }
 
@@ -647,34 +548,23 @@ export function setPluginEnabled(pluginId: string, enabled: boolean): void {
 
 /**
  * Toggle an MCP server's enabled state.
+ * Searches MCP servers embedded in plugins.
  */
 export function setMcpServerEnabled(serverId: string, enabled: boolean): void {
   const data = loadAppPluginsData();
   let found = false;
 
-  // Check standalone MCP servers
-  for (const server of data.mcpServers) {
-    if (server.id === serverId) {
-      server.enabled = enabled;
-      found = true;
-      break;
-    }
-  }
-
-  // Check MCP servers embedded in plugins
-  if (!found) {
-    for (const plugin of data.plugins) {
-      if (plugin.mcpServers) {
-        for (const server of plugin.mcpServers) {
-          if (server.id === serverId) {
-            server.enabled = enabled;
-            found = true;
-            break;
-          }
+  for (const plugin of data.plugins) {
+    if (plugin.mcpServers) {
+      for (const server of plugin.mcpServers) {
+        if (server.id === serverId) {
+          server.enabled = enabled;
+          found = true;
+          break;
         }
       }
-      if (found) break;
     }
+    if (found) break;
   }
 
   if (!found) {
@@ -687,34 +577,23 @@ export function setMcpServerEnabled(serverId: string, enabled: boolean): void {
 
 /**
  * Update an MCP server's environment variables.
+ * Searches MCP servers embedded in plugins.
  */
 export function setMcpServerEnv(serverId: string, env: Record<string, string>): void {
   const data = loadAppPluginsData();
   let found = false;
 
-  // Check standalone MCP servers
-  for (const server of data.mcpServers) {
-    if (server.id === serverId) {
-      server.env = env;
-      found = true;
-      break;
-    }
-  }
-
-  // Check MCP servers embedded in plugins
-  if (!found) {
-    for (const plugin of data.plugins) {
-      if (plugin.mcpServers) {
-        for (const server of plugin.mcpServers) {
-          if (server.id === serverId) {
-            server.env = env;
-            found = true;
-            break;
-          }
+  for (const plugin of data.plugins) {
+    if (plugin.mcpServers) {
+      for (const server of plugin.mcpServers) {
+        if (server.id === serverId) {
+          server.env = env;
+          found = true;
+          break;
         }
       }
-      if (found) break;
     }
+    if (found) break;
   }
 
   if (!found) {
@@ -736,21 +615,12 @@ export function getEnabledAppPlugins(): AppPlugin[] {
 }
 
 /**
- * Get all enabled MCP servers from all sources (for inclusion in SDK query options).
- * Includes both standalone MCP servers and those embedded in enabled plugins.
+ * Get all enabled MCP servers from enabled plugins (for inclusion in SDK query options).
  */
 export function getEnabledMcpServers(): McpServerConfig[] {
   const data = loadAppPluginsData();
   const servers: McpServerConfig[] = [];
 
-  // Standalone MCP servers
-  for (const server of data.mcpServers) {
-    if (server.enabled) {
-      servers.push(server);
-    }
-  }
-
-  // MCP servers from enabled plugins
   for (const plugin of data.plugins) {
     if (plugin.enabled && plugin.mcpServers) {
       for (const server of plugin.mcpServers) {

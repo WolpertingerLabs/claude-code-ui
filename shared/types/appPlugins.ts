@@ -6,8 +6,8 @@ export interface McpServerConfig {
   id: string;
   /** Human-readable name (used as key in SDK mcpServers config) */
   name: string;
-  /** Which app plugin this came from (null if standalone) */
-  sourcePluginId: string | null;
+  /** The app plugin this MCP server belongs to */
+  sourcePluginId: string;
   /** Whether this MCP server is enabled */
   enabled: boolean;
   /** Server transport type */
@@ -24,8 +24,8 @@ export interface McpServerConfig {
   env?: Record<string, string>;
   /** Original env templates from .mcp.json (e.g. "${API_KEY}", "${DB_URL:-localhost}") */
   envDefaults?: Record<string, string>;
-  /** The scan root this MCP server was discovered from (for standalone servers) */
-  scanRoot?: string;
+  /** Directory containing the .mcp.json this server was parsed from (for path resolution) */
+  mcpJsonDir?: string;
 }
 
 /** An app-wide plugin discovered from a recursive scan */
@@ -66,8 +66,6 @@ export interface AppPluginsData {
   scanRoots: PluginScanRoot[];
   /** All discovered app-wide plugins */
   plugins: AppPlugin[];
-  /** Standalone MCP servers (not from plugins) */
-  mcpServers: McpServerConfig[];
 }
 
 /** API response for scan operations */
@@ -76,5 +74,4 @@ export interface ScanResult {
   pluginsFound: number;
   mcpServersFound: number;
   plugins: AppPlugin[];
-  mcpServers: McpServerConfig[];
 }

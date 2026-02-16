@@ -139,7 +139,6 @@ export default function Settings({ onLogout }: SettingsProps) {
       if (!prev) return prev;
       return {
         ...prev,
-        mcpServers: prev.mcpServers.map((s) => (s.id === serverId ? { ...s, enabled } : s)),
         plugins: prev.plugins.map((p) => ({
           ...p,
           mcpServers: p.mcpServers?.map((s) => (s.id === serverId ? { ...s, enabled } : s)),
@@ -182,7 +181,6 @@ export default function Settings({ onLogout }: SettingsProps) {
         if (!prev) return prev;
         return {
           ...prev,
-          mcpServers: prev.mcpServers.map((s) => (s.id === serverId ? { ...s, env: { ...editingEnv } } : s)),
           plugins: prev.plugins.map((p) => ({
             ...p,
             mcpServers: p.mcpServers?.map((s) => (s.id === serverId ? { ...s, env: { ...editingEnv } } : s)),
@@ -244,20 +242,15 @@ export default function Settings({ onLogout }: SettingsProps) {
     return /^\$\{[A-Za-z_][A-Za-z0-9_]*\}$/.test(value);
   };
 
-  // Collect all MCP servers from all sources
+  // Collect all MCP servers from plugins
   const allMcpServers: (McpServerConfig & { pluginName?: string })[] = [];
   if (appPluginsData) {
-    // From plugins
     for (const plugin of appPluginsData.plugins) {
       if (plugin.mcpServers) {
         for (const server of plugin.mcpServers) {
           allMcpServers.push({ ...server, pluginName: plugin.manifest.name });
         }
       }
-    }
-    // Standalone
-    for (const server of appPluginsData.mcpServers) {
-      allMcpServers.push(server);
     }
   }
 

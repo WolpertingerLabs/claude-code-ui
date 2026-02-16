@@ -1,11 +1,13 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
+import { resolve, isAbsolute } from "path";
 import { chatFileService } from "./chat-file-service.js";
 import { findChat } from "../utils/chat-lookup.js";
 import { setSlashCommandsForDirectory } from "./slashCommands.js";
 import type { DefaultPermissions } from "shared/types/index.js";
 import type { StreamEvent } from "shared/types/index.js";
+import type { McpServerConfig } from "shared/types/index.js";
 import { migratePermissions } from "shared/types/index.js";
 import { getPluginsForDirectory, type Plugin } from "./plugins.js";
 import { getEnabledAppPlugins, getEnabledMcpServers } from "./app-plugins.js";
@@ -82,7 +84,7 @@ function buildPluginOptions(folder: string, activePluginIds?: string[]): any[] {
 }
 
 /**
- * Build MCP server configuration for Claude SDK from enabled app-wide MCP servers.
+ * Build MCP server configuration for Claude SDK from enabled plugin-embedded MCP servers.
  */
 function resolveEnvReferences(env: Record<string, string>): Record<string, string> {
   const resolved: Record<string, string> = {};
@@ -98,10 +100,44 @@ function resolveEnvReferences(env: Record<string, string>): Record<string, strin
   return resolved;
 }
 
+/**
+ * Resolve ${CLAUDE_PLUGIN_ROOT} and relative paths in MCP server command/args.
+ * Uses the server's mcpJsonDir or the parent plugin's path as the base directory.
+ */
+function resolveServerPaths(
+  server: McpServerConfig,
+  pluginPath?: string,
+): { command?: string; args?: string[] } {
+  const baseDir = server.mcpJsonDir || pluginPath;
+  if (!baseDir) return { command: server.command, args: server.args };
+
+  const resolvePath = (value: string): string => {
+    // Replace ${CLAUDE_PLUGIN_ROOT} with the base directory
+    const replaced = value.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, baseDir);
+    // If still relative after replacement, resolve against baseDir
+    if (!isAbsolute(replaced)) {
+      return resolve(baseDir, replaced);
+    }
+    return replaced;
+  };
+
+  return {
+    command: server.command ? resolvePath(server.command) : server.command,
+    args: server.args?.map(resolvePath),
+  };
+}
+
 function buildMcpServerOptions(): { mcpServers: Record<string, any>; allowedTools: string[] } | undefined {
   try {
     const mcpServers = getEnabledMcpServers();
     if (mcpServers.length === 0) return undefined;
+
+    // Build a map of plugin ID → plugin path for resolving MCP server paths
+    const appPlugins = getEnabledAppPlugins();
+    const pluginPathMap = new Map<string, string>();
+    for (const plugin of appPlugins) {
+      pluginPathMap.set(plugin.id, plugin.pluginPath);
+    }
 
     const serverConfig: Record<string, any> = {};
     const allowedTools: string[] = [];
@@ -109,9 +145,11 @@ function buildMcpServerOptions(): { mcpServers: Record<string, any>; allowedTool
     for (const server of mcpServers) {
       const resolvedEnv = server.env ? resolveEnvReferences(server.env) : undefined;
       if (server.type === "stdio") {
+        const pluginPath = pluginPathMap.get(server.sourcePluginId);
+        const { command, args } = resolveServerPaths(server, pluginPath);
         serverConfig[server.name] = {
-          command: server.command,
-          args: server.args || [],
+          command,
+          args: args || [],
           ...(resolvedEnv && { env: resolvedEnv }),
         };
       } else {
