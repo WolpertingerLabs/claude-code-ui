@@ -46,13 +46,16 @@ export default function SlashCommandsModal({
   const handleToggleAppPlugin = async (pluginId: string, enabled: boolean) => {
     if (!appPluginsData || !onAppPluginsDataChange) return;
 
-    // Optimistic update
-    const updatedPlugins = appPluginsData.plugins.map((p) => (p.id === pluginId ? { ...p, enabled } : p));
-    // If disabling a plugin, also disable its MCP servers
-    const updatedMcpServers = !enabled
-      ? appPluginsData.mcpServers.map((s) => (s.sourcePluginId === pluginId ? { ...s, enabled: false } : s))
-      : appPluginsData.mcpServers;
-    onAppPluginsDataChange({ ...appPluginsData, plugins: updatedPlugins, mcpServers: updatedMcpServers });
+    // Optimistic update (cascade: disabling plugin disables its embedded MCP servers)
+    const updatedPlugins = appPluginsData.plugins.map((p) => {
+      if (p.id !== pluginId) return p;
+      const updated = { ...p, enabled };
+      if (!enabled && updated.mcpServers) {
+        updated.mcpServers = updated.mcpServers.map((s) => ({ ...s, enabled: false }));
+      }
+      return updated;
+    });
+    onAppPluginsDataChange({ ...appPluginsData, plugins: updatedPlugins });
 
     try {
       await toggleAppPlugin(pluginId, enabled);
@@ -66,9 +69,12 @@ export default function SlashCommandsModal({
   const handleToggleMcpServer = async (serverId: string, enabled: boolean) => {
     if (!appPluginsData || !onAppPluginsDataChange) return;
 
-    // Optimistic update
-    const updatedMcpServers = appPluginsData.mcpServers.map((s) => (s.id === serverId ? { ...s, enabled } : s));
-    onAppPluginsDataChange({ ...appPluginsData, mcpServers: updatedMcpServers });
+    // Optimistic update — modify servers within their parent plugins
+    const updatedPlugins = appPluginsData.plugins.map((p) => ({
+      ...p,
+      mcpServers: p.mcpServers?.map((s) => (s.id === serverId ? { ...s, enabled } : s)),
+    }));
+    onAppPluginsDataChange({ ...appPluginsData, plugins: updatedPlugins });
 
     try {
       await toggleMcpServer(serverId, enabled);
@@ -120,7 +126,7 @@ export default function SlashCommandsModal({
   };
 
   const appPlugins = appPluginsData?.plugins ?? [];
-  const mcpServers = appPluginsData?.mcpServers ?? [];
+  const mcpServers = appPlugins.flatMap((p) => p.mcpServers ?? []);
   const hasAppPlugins = appPlugins.length > 0;
   const hasMcpServers = mcpServers.length > 0;
   const hasAnyContent = slashCommands.length > 0 || plugins.length > 0 || hasAppPlugins || hasMcpServers;
