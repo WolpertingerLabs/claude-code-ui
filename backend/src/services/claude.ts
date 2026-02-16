@@ -2,6 +2,7 @@ import { query } from "@anthropic-ai/claude-agent-sdk";
 import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
 import { chatFileService } from "./chat-file-service.js";
+import { findChat } from "../utils/chat-lookup.js";
 import { setSlashCommandsForDirectory } from "./slashCommands.js";
 import type { DefaultPermissions } from "shared/types/index.js";
 import type { StreamEvent } from "shared/types/index.js";
@@ -310,9 +311,18 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
   let initialMetadata: Record<string, any>;
 
   if (opts.chatId) {
-    // Existing chat flow
-    const chat = chatFileService.getChat(opts.chatId);
-    if (!chat) throw new Error("Chat not found");
+    // Existing chat flow — check file storage first, then fall back to filesystem.
+    // CLI-created conversations only exist as JSONL files in ~/.claude/projects/
+    // and won't have a record in data/chats/ until they're first used from the UI.
+    let chat = chatFileService.getChat(opts.chatId);
+    if (!chat) {
+      // Filesystem fallback: find the session log and create a file storage record
+      // so that subsequent interactions (permission tracking, metadata updates) work.
+      const fsChat = findChat(opts.chatId, false);
+      if (!fsChat) throw new Error("Chat not found");
+      log.debug(`Chat ${opts.chatId} found via filesystem fallback, creating file storage record`);
+      chat = chatFileService.upsertChat(fsChat.id, fsChat.folder, fsChat.session_id, { metadata: fsChat.metadata });
+    }
     folder = chat.folder;
     resumeSessionId = chat.session_id;
     initialMetadata = JSON.parse(chat.metadata || "{}");
