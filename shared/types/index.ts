@@ -22,3 +22,7 @@ export type { SlashCommand } from "./slashCommand.js";
 export type { BranchConfig, DiffFileType, DiffFileEntry, GitDiffResponse } from "./git.js";
 
 export type { SessionStatus } from "./session.js";
+
+export type { AgentConfig } from "./agent.js";
+
+export type { ChatMessage, ChatMessage as AgentChatMessage, CronJob, Connection, Trigger, ActivityEntry, MemoryItem } from "./agentFeatures.js";

@@ -23,6 +23,7 @@ import type {
   PluginScanRoot,
   AppPluginsData,
   ScanResult,
+  AgentConfig,
 } from "shared/types/index.js";
 
 export type {
@@ -50,6 +51,7 @@ export type {
   PluginScanRoot,
   AppPluginsData,
   ScanResult,
+  AgentConfig,
 };
 
 const BASE = "/api";
@@ -326,4 +328,40 @@ export async function updateMcpServerEnv(serverId: string, env: Record<string, s
     body: JSON.stringify({ env }),
   });
   await assertOk(res, "Failed to update MCP server env");
+}
+
+// Agent API functions
+
+export async function listAgents(): Promise<AgentConfig[]> {
+  const res = await fetch(`${BASE}/agents`, { credentials: "include" });
+  await assertOk(res, "Failed to list agents");
+  const data = await res.json();
+  return data.agents;
+}
+
+export async function getAgent(alias: string): Promise<AgentConfig> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}`, { credentials: "include" });
+  await assertOk(res, "Failed to get agent");
+  const data = await res.json();
+  return data.agent;
+}
+
+export async function createAgent(agent: { name: string; alias: string; description: string; systemPrompt?: string }): Promise<AgentConfig> {
+  const res = await fetch(`${BASE}/agents`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(agent),
+  });
+  await assertOk(res, "Failed to create agent");
+  const data = await res.json();
+  return data.agent;
+}
+
+export async function deleteAgent(alias: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  await assertOk(res, "Failed to delete agent");
 }
