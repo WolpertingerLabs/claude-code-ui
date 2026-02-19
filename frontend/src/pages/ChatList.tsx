@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ClipboardList, X, Plus, Settings, Bookmark } from "lucide-react";
+import { ClipboardList, X, Plus, Settings, Bookmark, Bot } from "lucide-react";
 import { listChats, deleteChat, toggleBookmark, getSessionStatus, type Chat, type SessionStatus, type DefaultPermissions } from "../api";
 import ChatListItem from "../components/ChatListItem";
 import PermissionSettings from "../components/PermissionSettings";
@@ -249,6 +249,22 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
             title="New Chat"
           >
             <Plus size={18} />
+          </button>
+          <button
+            onClick={() => navigate("/agents")}
+            style={{
+              background: "var(--bg-secondary)",
+              color: "var(--text)",
+              padding: "10px",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+            title="Agents"
+          >
+            <Bot size={18} />
           </button>
           <button
             onClick={() => navigate("/settings")}
