@@ -6,8 +6,18 @@ import { homedir } from "os";
 import type { AgentConfig } from "shared";
 import { createAgent, listAgents, getAgent, deleteAgent, agentExists, isValidAlias } from "../services/agent-file-service.js";
 import { compileIdentityPrompt, scaffoldWorkspace } from "../services/claude-compiler.js";
+import { agentWorkspaceRouter } from "./agent-workspace.js";
+import { agentMemoryRouter } from "./agent-memory.js";
+import { agentCronJobsRouter } from "./agent-cron-jobs.js";
+import { agentActivityRouter } from "./agent-activity.js";
 
 export const agentsRouter = Router();
+
+// Mount sub-routers for agent operational data
+agentsRouter.use("/:alias/workspace", agentWorkspaceRouter);
+agentsRouter.use("/:alias/memory", agentMemoryRouter);
+agentsRouter.use("/:alias/cron-jobs", agentCronJobsRouter);
+agentsRouter.use("/:alias/activity", agentActivityRouter);
 
 function getAgentWorkspacePath(alias: string): string {
   const baseDir = process.env.CCUI_AGENTS_DIR || join(homedir(), ".ccui-agents");
@@ -33,7 +43,7 @@ agentsRouter.get("/", (_req: Request, res: Response): void => {
 });
 
 agentsRouter.post("/", (req: Request, res: Response): void => {
-  const { name, alias, description, systemPrompt } = req.body as Partial<AgentConfig>;
+  const { name, alias, description, systemPrompt, emoji, personality, role, tone } = req.body as Partial<AgentConfig>;
 
   if (!name || !alias || !description) {
     res.status(400).json({ error: "Name, alias, and description are required" });
@@ -73,6 +83,10 @@ agentsRouter.post("/", (req: Request, res: Response): void => {
     description: description.trim(),
     systemPrompt: systemPrompt?.trim() || undefined,
     createdAt: Date.now(),
+    ...(emoji && { emoji }),
+    ...(personality && { personality: personality.trim() }),
+    ...(role && { role: role.trim() }),
+    ...(tone && { tone: tone.trim() }),
   };
 
   createAgent(config);
@@ -134,6 +148,7 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     userTimezone,
     userLocation,
     userContext,
+    eventSubscriptions,
   } = req.body as Partial<AgentConfig>;
 
   // Build updated config — only override fields present in request body
@@ -153,6 +168,7 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     ...(userTimezone !== undefined && { userTimezone: userTimezone?.trim() || undefined }),
     ...(userLocation !== undefined && { userLocation: userLocation?.trim() || undefined }),
     ...(userContext !== undefined && { userContext: userContext?.trim() || undefined }),
+    ...(eventSubscriptions !== undefined && { eventSubscriptions }),
   };
 
   // Validate required fields

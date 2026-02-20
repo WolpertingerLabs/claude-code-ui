@@ -1,3 +1,4 @@
+import { useState, useEffect } from "react";
 import { useOutletContext, useNavigate } from "react-router-dom";
 import {
   MessageSquare,
@@ -6,10 +7,12 @@ import {
   Radio,
   ChevronRight,
   Bot,
+  Save,
+  Check,
 } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockActivity, mockConnections, mockCronJobs, mockEventSubscriptions } from "./mockData";
-import type { AgentConfig } from "shared";
+import { updateAgent, getAgentCronJobs, getAgentActivity } from "../../../api";
+import type { AgentConfig, ActivityEntry } from "../../../api";
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -31,22 +34,93 @@ const typeColors: Record<string, string> = {
 };
 
 export default function Overview() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+  const { agent, onAgentUpdate } = useOutletContext<{ agent: AgentConfig; onAgentUpdate?: (agent: AgentConfig) => void }>();
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 
-  const activeConnections = mockConnections.filter((c) => c.status === "connected").length;
-  const activeCrons = mockCronJobs.filter((c) => c.status === "active").length;
-  const activeSubscriptions = mockEventSubscriptions.filter((s) => s.enabled).length;
-  const recentActivity = mockActivity.slice(0, 5);
+  // Identity form state
+  const [emoji, setEmoji] = useState(agent.emoji || "");
+  const [personality, setPersonality] = useState(agent.personality || "");
+  const [role, setRole] = useState(agent.role || "");
+  const [tone, setTone] = useState(agent.tone || "");
+  const [pronouns, setPronouns] = useState(agent.pronouns || "");
+  const [userName, setUserName] = useState(agent.userName || "");
+  const [userTimezone, setUserTimezone] = useState(agent.userTimezone || "");
+  const [userLocation, setUserLocation] = useState(agent.userLocation || "");
+  const [userContext, setUserContext] = useState(agent.userContext || "");
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  // Stats from real APIs
+  const [cronCount, setCronCount] = useState(0);
+  const [cronTotal, setCronTotal] = useState(0);
+  const [recentActivity, setRecentActivity] = useState<ActivityEntry[]>([]);
+
+  const eventSubs = agent.eventSubscriptions || [];
+  const activeSubscriptions = eventSubs.filter((s) => s.enabled).length;
+
+  useEffect(() => {
+    // Fetch real cron job stats
+    getAgentCronJobs(agent.alias)
+      .then((jobs) => {
+        setCronTotal(jobs.length);
+        setCronCount(jobs.filter((j) => j.status === "active").length);
+      })
+      .catch(() => { setCronTotal(0); setCronCount(0); });
+
+    // Fetch recent activity
+    getAgentActivity(agent.alias, undefined, 5)
+      .then(setRecentActivity)
+      .catch(() => setRecentActivity([]));
+  }, [agent.alias]);
+
+  const handleSave = async () => {
+    setSaving(true);
+    try {
+      const updated = await updateAgent(agent.alias, {
+        emoji: emoji || undefined,
+        personality: personality || undefined,
+        role: role || undefined,
+        tone: tone || undefined,
+        pronouns: pronouns || undefined,
+        userName: userName || undefined,
+        userTimezone: userTimezone || undefined,
+        userLocation: userLocation || undefined,
+        userContext: userContext || undefined,
+      });
+      onAgentUpdate?.(updated);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  };
 
   const stats = [
-    { label: "Connections", value: activeConnections, total: mockConnections.length, icon: Plug, color: "#58a6ff" },
-    { label: "Cron Jobs", value: activeCrons, total: mockCronJobs.length, icon: Clock, color: "var(--success)" },
-    { label: "Events", value: activeSubscriptions, total: mockEventSubscriptions.length, icon: Radio, color: "var(--warning)" },
+    { label: "Cron Jobs", value: cronCount, total: cronTotal, icon: Clock, color: "var(--success)" },
+    { label: "Events", value: activeSubscriptions, total: eventSubs.length, icon: Radio, color: "var(--warning)" },
   ];
 
   const basePath = `/agents/${agent.alias}`;
+
+  const inputStyle: React.CSSProperties = {
+    width: "100%",
+    background: "var(--bg)",
+    border: "1px solid var(--border)",
+    borderRadius: 8,
+    padding: "10px 12px",
+    fontSize: 14,
+  };
+
+  const labelStyle: React.CSSProperties = {
+    display: "block",
+    fontSize: 12,
+    fontWeight: 500,
+    color: "var(--text-muted)",
+    marginBottom: 4,
+  };
 
   return (
     <div style={{ padding: isMobile ? "16px" : "24px 32px", maxWidth: 800, margin: "0 auto" }}>
@@ -63,45 +137,25 @@ export default function Overview() {
               alignItems: "center",
               justifyContent: "center",
               flexShrink: 0,
+              fontSize: agent.emoji ? 22 : undefined,
             }}
           >
-            <Bot size={22} style={{ color: "var(--accent)" }} />
+            {agent.emoji || <Bot size={22} style={{ color: "var(--accent)" }} />}
           </div>
           <div>
             <h1 style={{ fontSize: 22, fontWeight: 700 }}>{agent.name}</h1>
             <p style={{ fontSize: 14, color: "var(--text-muted)", marginTop: 2 }}>
-              {agent.description}
+              {agent.role ? `${agent.role} — ` : ""}{agent.description}
             </p>
           </div>
         </div>
-
-        {agent.systemPrompt && (
-          <div
-            style={{
-              marginTop: 12,
-              padding: "12px 14px",
-              background: "var(--surface)",
-              border: "1px solid var(--border)",
-              borderRadius: 10,
-              fontSize: 13,
-              color: "var(--text-muted)",
-              lineHeight: 1.6,
-              fontFamily: "monospace",
-              whiteSpace: "pre-wrap",
-              maxHeight: 120,
-              overflow: "auto",
-            }}
-          >
-            {agent.systemPrompt}
-          </div>
-        )}
       </div>
 
       {/* Stat cards */}
       <div
         style={{
           display: "grid",
-          gridTemplateColumns: isMobile ? "1fr" : "repeat(3, 1fr)",
+          gridTemplateColumns: isMobile ? "1fr" : "repeat(2, 1fr)",
           gap: 12,
           marginBottom: 28,
         }}
@@ -222,6 +276,89 @@ export default function Overview() {
         </div>
       </div>
 
+      {/* Identity Settings */}
+      <div style={{ marginBottom: 28 }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+          <h2 style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+            Identity Settings
+          </h2>
+          <button
+            onClick={handleSave}
+            disabled={saving}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 6,
+              padding: "6px 14px",
+              borderRadius: 6,
+              fontSize: 13,
+              fontWeight: 500,
+              background: "var(--accent)",
+              color: "#fff",
+              cursor: saving ? "not-allowed" : "pointer",
+            }}
+          >
+            {saved ? <Check size={14} /> : <Save size={14} />}
+            {saving ? "Saving..." : saved ? "Saved" : "Save"}
+          </button>
+        </div>
+        <div
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--border)",
+            borderRadius: "var(--radius)",
+            padding: 20,
+            display: "grid",
+            gridTemplateColumns: isMobile ? "1fr" : "1fr 1fr",
+            gap: 14,
+          }}
+        >
+          <div>
+            <label style={labelStyle}>Emoji</label>
+            <input type="text" value={emoji} onChange={(e) => setEmoji(e.target.value)} placeholder="🤖" maxLength={4} style={{ ...inputStyle, width: 80 }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Role</label>
+            <input type="text" value={role} onChange={(e) => setRole(e.target.value)} placeholder="e.g. DevOps Assistant" style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: isMobile ? undefined : "1 / -1" }}>
+            <label style={labelStyle}>Personality</label>
+            <textarea value={personality} onChange={(e) => setPersonality(e.target.value)} placeholder="Describe the agent's personality..." rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+          <div>
+            <label style={labelStyle}>Tone</label>
+            <input type="text" value={tone} onChange={(e) => setTone(e.target.value)} placeholder="e.g. casual, professional" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Pronouns</label>
+            <input type="text" value={pronouns} onChange={(e) => setPronouns(e.target.value)} placeholder="e.g. they/them" style={inputStyle} />
+          </div>
+
+          {/* User context section */}
+          <div style={{ gridColumn: isMobile ? undefined : "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
+            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
+              Your Human
+            </p>
+          </div>
+          <div>
+            <label style={labelStyle}>Name</label>
+            <input type="text" value={userName} onChange={(e) => setUserName(e.target.value)} placeholder="Your name" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Timezone</label>
+            <input type="text" value={userTimezone} onChange={(e) => setUserTimezone(e.target.value)} placeholder="e.g. US/Eastern" style={inputStyle} />
+          </div>
+          <div>
+            <label style={labelStyle}>Location</label>
+            <input type="text" value={userLocation} onChange={(e) => setUserLocation(e.target.value)} placeholder="e.g. New York" style={inputStyle} />
+          </div>
+          <div style={{ gridColumn: isMobile ? undefined : "1 / -1" }}>
+            <label style={labelStyle}>Additional Context</label>
+            <textarea value={userContext} onChange={(e) => setUserContext(e.target.value)} placeholder="Anything else the agent should know about you..." rows={2} style={{ ...inputStyle, resize: "vertical" }} />
+          </div>
+        </div>
+      </div>
+
       {/* Recent activity */}
       <div>
         <div
@@ -251,53 +388,69 @@ export default function Overview() {
             <ChevronRight size={14} />
           </button>
         </div>
-        <div
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            overflow: "hidden",
-          }}
-        >
-          {recentActivity.map((entry, i) => (
-            <div
-              key={entry.id}
-              style={{
-                padding: "12px 16px",
-                display: "flex",
-                alignItems: "center",
-                gap: 12,
-                borderBottom: i < recentActivity.length - 1 ? "1px solid var(--border)" : "none",
-              }}
-            >
+        {recentActivity.length === 0 ? (
+          <div
+            style={{
+              textAlign: "center",
+              padding: "32px 20px",
+              color: "var(--text-muted)",
+              fontSize: 14,
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+            }}
+          >
+            No activity yet. Activity will appear here as the agent runs.
+          </div>
+        ) : (
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              overflow: "hidden",
+            }}
+          >
+            {recentActivity.map((entry, i) => (
               <div
+                key={entry.id}
                 style={{
-                  width: 8,
-                  height: 8,
-                  borderRadius: "50%",
-                  background: typeColors[entry.type] || "var(--text-muted)",
-                  flexShrink: 0,
+                  padding: "12px 16px",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 12,
+                  borderBottom: i < recentActivity.length - 1 ? "1px solid var(--border)" : "none",
                 }}
-              />
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <p
+              >
+                <div
                   style={{
-                    fontSize: 13,
-                    lineHeight: 1.5,
-                    overflow: "hidden",
-                    textOverflow: "ellipsis",
-                    whiteSpace: "nowrap",
+                    width: 8,
+                    height: 8,
+                    borderRadius: "50%",
+                    background: typeColors[entry.type] || "var(--text-muted)",
+                    flexShrink: 0,
                   }}
-                >
-                  {entry.message}
-                </p>
+                />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p
+                    style={{
+                      fontSize: 13,
+                      lineHeight: 1.5,
+                      overflow: "hidden",
+                      textOverflow: "ellipsis",
+                      whiteSpace: "nowrap",
+                    }}
+                  >
+                    {entry.message}
+                  </p>
+                </div>
+                <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>
+                  {timeAgo(entry.timestamp)}
+                </span>
               </div>
-              <span style={{ fontSize: 12, color: "var(--text-muted)", flexShrink: 0 }}>
-                {timeAgo(entry.timestamp)}
-              </span>
-            </div>
-          ))}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

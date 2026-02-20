@@ -11,7 +11,10 @@ export default function CreateAgent() {
   const [alias, setAlias] = useState("");
   const [aliasManual, setAliasManual] = useState(false);
   const [description, setDescription] = useState("");
-  const [systemPrompt, setSystemPrompt] = useState("");
+  const [emoji, setEmoji] = useState("");
+  const [personality, setPersonality] = useState("");
+  const [role, setRole] = useState("");
+  const [tone, setTone] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -45,7 +48,10 @@ export default function CreateAgent() {
         name: name.trim(),
         alias: alias.trim(),
         description: description.trim(),
-        systemPrompt: systemPrompt.trim() || undefined,
+        emoji: emoji.trim() || undefined,
+        personality: personality.trim() || undefined,
+        role: role.trim() || undefined,
+        tone: tone.trim() || undefined,
       });
       navigate("/agents");
     } catch (err) {
@@ -128,18 +134,31 @@ export default function CreateAgent() {
             gap: 20,
           }}
         >
-          {/* Name */}
-          <div>
-            <label style={labelStyle}>Name</label>
-            <input
-              type="text"
-              value={name}
-              onChange={(e) => handleNameChange(e.target.value)}
-              placeholder="My Agent"
-              autoFocus
-              maxLength={128}
-              style={inputStyle}
-            />
+          {/* Core fields */}
+          <div style={{ display: "flex", gap: 14, alignItems: "flex-start" }}>
+            <div style={{ flex: 1 }}>
+              <label style={labelStyle}>Name</label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => handleNameChange(e.target.value)}
+                placeholder="My Agent"
+                autoFocus
+                maxLength={128}
+                style={inputStyle}
+              />
+            </div>
+            <div style={{ width: 80, flexShrink: 0 }}>
+              <label style={labelStyle}>Emoji</label>
+              <input
+                type="text"
+                value={emoji}
+                onChange={(e) => setEmoji(e.target.value)}
+                placeholder="🤖"
+                maxLength={4}
+                style={{ ...inputStyle, textAlign: "center" }}
+              />
+            </div>
           </div>
 
           {/* Alias */}
@@ -171,22 +190,50 @@ export default function CreateAgent() {
             />
           </div>
 
-          {/* System Prompt */}
-          <div>
-            <label style={labelStyle}>
-              System Prompt <span style={{ fontWeight: 400 }}>(optional)</span>
-            </label>
-            <textarea
-              value={systemPrompt}
-              onChange={(e) => setSystemPrompt(e.target.value)}
-              placeholder="Instructions for this agent..."
-              rows={5}
-              style={{
-                ...inputStyle,
-                resize: "vertical",
-                minHeight: 100,
-              }}
-            />
+          {/* Identity fields */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 20 }}>
+            <p style={{ fontSize: 14, fontWeight: 600, color: "var(--text-muted)", marginBottom: 14 }}>
+              Identity <span style={{ fontWeight: 400 }}>(optional — editable after creation)</span>
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              <div>
+                <label style={labelStyle}>Role</label>
+                <input
+                  type="text"
+                  value={role}
+                  onChange={(e) => setRole(e.target.value)}
+                  placeholder="e.g. DevOps Assistant, Code Reviewer, Discord Bot"
+                  style={inputStyle}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Personality</label>
+                <textarea
+                  value={personality}
+                  onChange={(e) => setPersonality(e.target.value)}
+                  placeholder="Describe the agent's personality and behavior..."
+                  rows={3}
+                  style={{
+                    ...inputStyle,
+                    resize: "vertical",
+                    minHeight: 80,
+                  }}
+                />
+              </div>
+
+              <div>
+                <label style={labelStyle}>Tone</label>
+                <input
+                  type="text"
+                  value={tone}
+                  onChange={(e) => setTone(e.target.value)}
+                  placeholder="e.g. casual, professional, friendly, terse"
+                  style={inputStyle}
+                />
+              </div>
+            </div>
           </div>
 
           {error && (

@@ -1,101 +1,60 @@
-import { useState } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Plus, Wifi, WifiOff, AlertTriangle, MessageCircle, Hash, Mail, Cpu, LayoutGrid, MessagesSquare } from "lucide-react";
+import { Wifi, ExternalLink, Info } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockConnections } from "./mockData";
-import type { MockConnection } from "./mockData";
-import type { AgentConfig } from "shared";
+import type { AgentConfig } from "../../../api";
 
-const serviceIcons: Record<string, typeof MessageCircle> = {
-  Discord: MessageCircle,
-  Slack: MessagesSquare,
-  Google: LayoutGrid,
-  OpenRouter: Cpu,
-  Trello: Hash,
-  Gmail: Mail,
-};
+// Connections are managed by mcp-secure-proxy, not by claude-code-ui.
+// This page is a read-only status view showing which connections are available.
 
-const statusConfig: Record<string, { color: string; label: string; icon: typeof Wifi }> = {
-  connected: { color: "var(--success)", label: "Connected", icon: Wifi },
-  disconnected: { color: "var(--text-muted)", label: "Disconnected", icon: WifiOff },
-  error: { color: "var(--danger)", label: "Error", icon: AlertTriangle },
-};
-
-const typeLabels: Record<string, string> = {
-  bot: "Bot",
-  api: "API Key",
-  oauth: "OAuth",
-};
-
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+const KNOWN_CONNECTIONS = [
+  { name: "Discord Bot", alias: "discord-bot", description: "Real-time messaging via Discord Gateway WebSocket" },
+  { name: "GitHub", alias: "github", description: "Webhooks for push, PR, issue events" },
+  { name: "Slack", alias: "slack", description: "Workspace integration via Socket Mode" },
+  { name: "Stripe", alias: "stripe", description: "Payment and subscription webhooks" },
+  { name: "Trello", alias: "trello", description: "Board and card update webhooks" },
+  { name: "Notion", alias: "notion", description: "Database and page update polling" },
+  { name: "Linear", alias: "linear", description: "Issue and project update polling" },
+  { name: "Google", alias: "google", description: "Calendar, Drive, Gmail API access" },
+  { name: "Anthropic", alias: "anthropic", description: "Claude API access" },
+  { name: "OpenRouter", alias: "openrouter", description: "Multi-model API routing" },
+];
 
 export default function Connections() {
   useOutletContext<{ agent: AgentConfig }>();
   const isMobile = useIsMobile();
-  const [connections, setConnections] = useState<MockConnection[]>(mockConnections);
-
-  const toggleConnection = (id: string) => {
-    setConnections((prev) =>
-      prev.map((c) =>
-        c.id === id
-          ? {
-              ...c,
-              status: c.status === "connected" ? "disconnected" : "connected",
-              connectedAt: c.status !== "connected" ? Date.now() : c.connectedAt,
-            }
-          : c,
-      ),
-    );
-  };
 
   return (
     <div style={{ padding: isMobile ? "16px" : "24px 32px", maxWidth: 800, margin: "0 auto" }}>
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 20,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Connections</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-            Remote services and integrations
-          </p>
-        </div>
-        <button
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "var(--accent)",
-            color: "#fff",
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 500,
-            transition: "background 0.15s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
-        >
-          <Plus size={16} />
-          {!isMobile && "Add Connection"}
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700 }}>Connections</h1>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
+          External services available via mcp-secure-proxy
+        </p>
       </div>
 
-      {/* Connection cards grid */}
+      {/* Info banner */}
+      <div
+        style={{
+          background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+          border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+          borderRadius: "var(--radius)",
+          padding: "14px 18px",
+          marginBottom: 20,
+          display: "flex",
+          gap: 12,
+          alignItems: "flex-start",
+        }}
+      >
+        <Info size={18} style={{ color: "var(--accent)", flexShrink: 0, marginTop: 2 }} />
+        <div style={{ fontSize: 13, lineHeight: 1.6, color: "var(--text-muted)" }}>
+          Connections are configured in <code style={{ fontFamily: "monospace", background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 4 }}>mcp-secure-proxy</code>&apos;s{" "}
+          <code style={{ fontFamily: "monospace", background: "var(--bg-secondary)", padding: "1px 5px", borderRadius: 4 }}>remote.config.json</code>.
+          The proxy manages authentication, secrets, and event ingestion. Agents access these services via MCP tools during sessions.
+        </div>
+      </div>
+
+      {/* Connection cards */}
       <div
         style={{
           display: "grid",
@@ -103,106 +62,55 @@ export default function Connections() {
           gap: 12,
         }}
       >
-        {connections.map((conn) => {
-          const sConf = statusConfig[conn.status];
-          const StatusIcon = sConf.icon;
-          const ServiceIcon = serviceIcons[conn.service] || Cpu;
-
-          return (
-            <div
-              key={conn.id}
-              style={{
-                background: "var(--surface)",
-                border: "1px solid var(--border)",
-                borderRadius: "var(--radius)",
-                padding: "16px 18px",
-                display: "flex",
-                flexDirection: "column",
-                gap: 12,
-              }}
-            >
-              {/* Top: icon, name, status */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-                <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-                  <div
+        {KNOWN_CONNECTIONS.map((conn) => (
+          <div
+            key={conn.alias}
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              padding: "16px 18px",
+              display: "flex",
+              flexDirection: "column",
+              gap: 10,
+            }}
+          >
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                <div
+                  style={{
+                    width: 36,
+                    height: 36,
+                    borderRadius: 8,
+                    background: "color-mix(in srgb, var(--accent) 12%, transparent)",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    flexShrink: 0,
+                  }}
+                >
+                  <Wifi size={18} style={{ color: "var(--accent)" }} />
+                </div>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600 }}>{conn.name}</h3>
+                  <span
                     style={{
-                      width: 36,
-                      height: 36,
-                      borderRadius: 8,
-                      background: `color-mix(in srgb, ${sConf.color} 12%, transparent)`,
-                      display: "flex",
-                      alignItems: "center",
-                      justifyContent: "center",
-                      flexShrink: 0,
+                      fontSize: 11,
+                      fontFamily: "monospace",
+                      color: "var(--text-muted)",
                     }}
                   >
-                    <ServiceIcon size={18} style={{ color: sConf.color }} />
-                  </div>
-                  <div>
-                    <h3 style={{ fontSize: 15, fontWeight: 600 }}>{conn.service}</h3>
-                    <span
-                      style={{
-                        fontSize: 11,
-                        color: "var(--text-muted)",
-                        background: "var(--bg-secondary)",
-                        padding: "1px 6px",
-                        borderRadius: 4,
-                      }}
-                    >
-                      {typeLabels[conn.type]}
-                    </span>
-                  </div>
-                </div>
-                {/* Status dot + label */}
-                <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-                  <StatusIcon size={14} style={{ color: sConf.color }} />
-                  <span style={{ fontSize: 12, fontWeight: 500, color: sConf.color }}>
-                    {sConf.label}
+                    {conn.alias}
                   </span>
                 </div>
               </div>
-
-              {/* Description */}
-              <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
-                {conn.description}
-              </p>
-
-              {/* Footer */}
-              <div
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  paddingTop: 10,
-                  borderTop: "1px solid var(--border)",
-                }}
-              >
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  {conn.connectedAt ? `Since ${timeAgo(conn.connectedAt)}` : "Never connected"}
-                </span>
-                <button
-                  onClick={() => toggleConnection(conn.id)}
-                  style={{
-                    padding: "5px 12px",
-                    borderRadius: 6,
-                    fontSize: 12,
-                    fontWeight: 500,
-                    background: "transparent",
-                    color: conn.status === "connected" ? "var(--danger)" : "var(--success)",
-                    border: `1px solid color-mix(in srgb, ${conn.status === "connected" ? "var(--danger)" : "var(--success)"} 30%, transparent)`,
-                    transition: "background 0.15s",
-                  }}
-                  onMouseEnter={(e) =>
-                    (e.currentTarget.style.background = `color-mix(in srgb, ${conn.status === "connected" ? "var(--danger)" : "var(--success)"} 10%, transparent)`)
-                  }
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                >
-                  {conn.status === "connected" ? "Disconnect" : "Connect"}
-                </button>
-              </div>
+              <ExternalLink size={14} style={{ color: "var(--text-muted)" }} />
             </div>
-          );
-        })}
+            <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5 }}>
+              {conn.description}
+            </p>
+          </div>
+        ))}
       </div>
     </div>
   );

@@ -24,6 +24,8 @@ import type {
   AppPluginsData,
   ScanResult,
   AgentConfig,
+  CronJob,
+  ActivityEntry,
 } from "shared/types/index.js";
 
 export type {
@@ -52,6 +54,8 @@ export type {
   AppPluginsData,
   ScanResult,
   AgentConfig,
+  CronJob,
+  ActivityEntry,
 };
 
 const BASE = "/api";
@@ -353,7 +357,7 @@ export async function getAgent(alias: string): Promise<AgentConfig> {
   return data.agent;
 }
 
-export async function createAgent(agent: { name: string; alias: string; description: string; systemPrompt?: string }): Promise<AgentConfig> {
+export async function createAgent(agent: { name: string; alias: string; description: string; systemPrompt?: string; emoji?: string; personality?: string; role?: string; tone?: string }): Promise<AgentConfig> {
   const res = await fetch(`${BASE}/agents`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
@@ -390,4 +394,100 @@ export async function getAgentIdentityPrompt(alias: string): Promise<string> {
   await assertOk(res, "Failed to get agent identity prompt");
   const data = await res.json();
   return data.prompt;
+}
+
+// Agent workspace file API functions
+
+export async function getWorkspaceFiles(alias: string): Promise<string[]> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/workspace`, { credentials: "include" });
+  await assertOk(res, "Failed to list workspace files");
+  const data = await res.json();
+  return data.files;
+}
+
+export async function getWorkspaceFile(alias: string, filename: string): Promise<string> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/workspace/${encodeURIComponent(filename)}`, { credentials: "include" });
+  await assertOk(res, "Failed to read workspace file");
+  const data = await res.json();
+  return data.content;
+}
+
+export async function updateWorkspaceFile(alias: string, filename: string, content: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/workspace/${encodeURIComponent(filename)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ content }),
+  });
+  await assertOk(res, "Failed to update workspace file");
+}
+
+// Agent memory API functions
+
+export async function getAgentMemory(alias: string): Promise<{ curatedMemory: string; dailyFiles: string[] }> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/memory`, { credentials: "include" });
+  await assertOk(res, "Failed to get agent memory");
+  return res.json();
+}
+
+export async function getAgentDailyMemory(alias: string, date: string): Promise<string> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/memory/${encodeURIComponent(date)}`, { credentials: "include" });
+  await assertOk(res, "Failed to get daily memory");
+  const data = await res.json();
+  return data.content;
+}
+
+// Agent cron jobs API functions
+
+export async function getAgentCronJobs(alias: string): Promise<CronJob[]> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/cron-jobs`, { credentials: "include" });
+  await assertOk(res, "Failed to list cron jobs");
+  const data = await res.json();
+  return data.jobs;
+}
+
+export async function createAgentCronJob(alias: string, job: Omit<CronJob, "id">): Promise<CronJob> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/cron-jobs`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(job),
+  });
+  await assertOk(res, "Failed to create cron job");
+  const data = await res.json();
+  return data.job;
+}
+
+export async function updateAgentCronJob(alias: string, jobId: string, updates: Partial<CronJob>): Promise<CronJob> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/cron-jobs/${encodeURIComponent(jobId)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(updates),
+  });
+  await assertOk(res, "Failed to update cron job");
+  const data = await res.json();
+  return data.job;
+}
+
+export async function deleteAgentCronJob(alias: string, jobId: string): Promise<void> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/cron-jobs/${encodeURIComponent(jobId)}`, {
+    method: "DELETE",
+    credentials: "include",
+  });
+  await assertOk(res, "Failed to delete cron job");
+}
+
+// Agent activity API functions
+
+export async function getAgentActivity(alias: string, type?: string, limit?: number, offset?: number): Promise<ActivityEntry[]> {
+  const params = new URLSearchParams();
+  if (type) params.append("type", type);
+  if (limit !== undefined) params.append("limit", limit.toString());
+  if (offset !== undefined) params.append("offset", offset.toString());
+
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/activity${params.toString() ? `?${params}` : ""}`, { credentials: "include" });
+  await assertOk(res, "Failed to get agent activity");
+  const data = await res.json();
+  return data.entries;
 }

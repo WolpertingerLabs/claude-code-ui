@@ -1,252 +1,345 @@
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Plus, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { Save, FileText, Calendar, ChevronRight, Check } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockMemory } from "./mockData";
-import type { AgentConfig } from "shared";
+import { getWorkspaceFiles, getWorkspaceFile, updateWorkspaceFile, getAgentMemory, getAgentDailyMemory } from "../../../api";
+import type { AgentConfig } from "../../../api";
 
-const categoryConfig: Record<string, { color: string; label: string }> = {
-  fact: { color: "#58a6ff", label: "Fact" },
-  preference: { color: "var(--accent)", label: "Preference" },
-  context: { color: "var(--success)", label: "Context" },
-  instruction: { color: "var(--warning)", label: "Instruction" },
+const FILE_LABELS: Record<string, string> = {
+  "SOUL.md": "Soul & Personality",
+  "USER.md": "Human Context",
+  "TOOLS.md": "Environment & Tools",
+  "HEARTBEAT.md": "Heartbeat Tasks",
+  "MEMORY.md": "Curated Memory",
 };
 
-function timeAgo(ts: number): string {
-  const diff = Date.now() - ts;
-  const mins = Math.floor(diff / 60000);
-  if (mins < 1) return "Just now";
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  return `${days}d ago`;
-}
+const FILE_DESCRIPTIONS: Record<string, string> = {
+  "SOUL.md": "Personality, values, tone, boundaries — who the agent IS",
+  "USER.md": "Info about the human — name, timezone, preferences",
+  "TOOLS.md": "Environment-specific notes — devices, SSH, APIs",
+  "HEARTBEAT.md": "Checklist for heartbeat polls — agent populates this",
+  "MEMORY.md": "Curated long-term memory — distilled from daily journals",
+};
 
 export default function Memory() {
-  useOutletContext<{ agent: AgentConfig }>();
+  const { agent } = useOutletContext<{ agent: AgentConfig }>();
   const isMobile = useIsMobile();
-  const [search, setSearch] = useState("");
-  const [expanded, setExpanded] = useState<Set<string>>(new Set());
 
-  const toggleExpand = (id: string) => {
-    setExpanded((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
+  const [files, setFiles] = useState<string[]>([]);
+  const [selectedFile, setSelectedFile] = useState<string | null>(null);
+  const [content, setContent] = useState("");
+  const [originalContent, setOriginalContent] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [saved, setSaved] = useState(false);
 
-  const filtered = mockMemory.filter((item) => {
-    if (!search.trim()) return true;
-    const q = search.toLowerCase();
-    return (
-      item.key.toLowerCase().includes(q) ||
-      item.value.toLowerCase().includes(q) ||
-      item.category.toLowerCase().includes(q)
-    );
-  });
+  // Daily memory
+  const [dailyFiles, setDailyFiles] = useState<string[]>([]);
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [dailyContent, setDailyContent] = useState("");
+  const [showDaily, setShowDaily] = useState(false);
+
+  // Load workspace file list
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    Promise.all([
+      getWorkspaceFiles(agent.alias),
+      getAgentMemory(agent.alias),
+    ])
+      .then(([fileList, memoryInfo]) => {
+        if (cancelled) return;
+        const ordered = ["SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "MEMORY.md"];
+        const available = ordered.filter((f) => fileList.includes(f));
+        setFiles(available);
+        setDailyFiles(memoryInfo.dailyFiles);
+        // Auto-select first file only on initial load
+        setSelectedFile((prev) => prev || (available.length > 0 ? available[0] : null));
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setFiles([]);
+        setDailyFiles([]);
+      })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [agent.alias]);
+
+  // Load selected file content
+  useEffect(() => {
+    if (!selectedFile) return;
+    setLoading(true);
+    getWorkspaceFile(agent.alias, selectedFile)
+      .then((c) => {
+        setContent(c);
+        setOriginalContent(c);
+      })
+      .catch(() => {
+        setContent("");
+        setOriginalContent("");
+      })
+      .finally(() => setLoading(false));
+  }, [agent.alias, selectedFile]);
+
+  // Load daily memory content
+  useEffect(() => {
+    if (!selectedDate) return;
+    getAgentDailyMemory(agent.alias, selectedDate.replace(".md", ""))
+      .then(setDailyContent)
+      .catch(() => setDailyContent(""));
+  }, [agent.alias, selectedDate]);
+
+  const hasChanges = content !== originalContent;
+
+  const handleSave = useCallback(async () => {
+    if (!selectedFile || !hasChanges) return;
+    setSaving(true);
+    try {
+      await updateWorkspaceFile(agent.alias, selectedFile, content);
+      setOriginalContent(content);
+      setSaved(true);
+      setTimeout(() => setSaved(false), 2000);
+    } catch {
+      // ignore
+    } finally {
+      setSaving(false);
+    }
+  }, [agent.alias, selectedFile, content, hasChanges]);
+
+  // Ctrl+S shortcut
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "s") {
+        e.preventDefault();
+        handleSave();
+      }
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [handleSave]);
 
   return (
-    <div style={{ padding: isMobile ? "16px" : "24px 32px", maxWidth: 800, margin: "0 auto" }}>
+    <div style={{ padding: isMobile ? "16px" : "24px 32px", maxWidth: 900, margin: "0 auto" }}>
       {/* Header */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          marginBottom: 16,
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 700 }}>Memory</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-            Stored knowledge and agent context
-          </p>
-        </div>
-        <button
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "var(--accent)",
-            color: "#fff",
-            padding: "8px 14px",
-            borderRadius: 8,
-            fontSize: 14,
-            fontWeight: 500,
-            transition: "background 0.15s",
-          }}
-          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-hover)")}
-          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
-        >
-          <Plus size={16} />
-          {!isMobile && "Add Memory"}
-        </button>
+      <div style={{ marginBottom: 20 }}>
+        <h1 style={{ fontSize: 20, fontWeight: 700 }}>Memory & Workspace</h1>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
+          Edit workspace files and view agent memory
+        </p>
       </div>
 
-      {/* Search */}
-      <div
-        style={{
-          position: "relative",
-          marginBottom: 16,
-        }}
-      >
-        <Search
-          size={16}
-          style={{
-            position: "absolute",
-            left: 14,
-            top: "50%",
-            transform: "translateY(-50%)",
-            color: "var(--text-muted)",
-            pointerEvents: "none",
-          }}
-        />
-        <input
-          type="text"
-          value={search}
-          onChange={(e) => setSearch(e.target.value)}
-          placeholder="Search memories..."
-          style={{
-            width: "100%",
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: 10,
-            padding: "12px 14px 12px 38px",
-            fontSize: 14,
-          }}
-        />
-      </div>
-
-      {/* Category legend */}
-      <div style={{ display: "flex", gap: 12, marginBottom: 16, flexWrap: "wrap" }}>
-        {Object.entries(categoryConfig).map(([key, conf]) => (
-          <div key={key} style={{ display: "flex", alignItems: "center", gap: 5, fontSize: 12 }}>
-            <div
-              style={{
-                width: 8,
-                height: 8,
-                borderRadius: "50%",
-                background: conf.color,
-              }}
-            />
-            <span style={{ color: "var(--text-muted)" }}>{conf.label}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Memory items */}
-      {filtered.length === 0 ? (
-        <div
-          style={{
-            textAlign: "center",
-            padding: "48px 20px",
-            color: "var(--text-muted)",
-            fontSize: 14,
-          }}
-        >
-          {search.trim() ? "No memories matching your search." : "No memories stored yet."}
-        </div>
-      ) : (
-        <div
-          style={{
-            background: "var(--surface)",
-            border: "1px solid var(--border)",
-            borderRadius: "var(--radius)",
-            overflow: "hidden",
-          }}
-        >
-          {filtered.map((item, i) => {
-            const catConf = categoryConfig[item.category];
-            const isExpanded = expanded.has(item.id);
-
-            return (
-              <div
-                key={item.id}
+      <div style={{ display: "flex", gap: 20, flexDirection: isMobile ? "column" : "row" }}>
+        {/* File sidebar */}
+        <div style={{ width: isMobile ? "100%" : 220, flexShrink: 0 }}>
+          <h3
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              marginBottom: 8,
+            }}
+          >
+            Workspace Files
+          </h3>
+          <div
+            style={{
+              background: "var(--surface)",
+              border: "1px solid var(--border)",
+              borderRadius: "var(--radius)",
+              overflow: "hidden",
+              marginBottom: 16,
+            }}
+          >
+            {files.map((file, i) => (
+              <button
+                key={file}
+                onClick={() => {
+                  setSelectedFile(file);
+                  setShowDaily(false);
+                }}
                 style={{
-                  borderBottom: i < filtered.length - 1 ? "1px solid var(--border)" : "none",
+                  width: "100%",
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  padding: "10px 14px",
+                  background: selectedFile === file && !showDaily ? "var(--bg-secondary)" : "transparent",
+                  borderBottom: i < files.length - 1 ? "1px solid var(--border)" : "none",
+                  textAlign: "left",
+                  cursor: "pointer",
+                  transition: "background 0.1s",
+                }}
+                onMouseEnter={(e) => {
+                  if (selectedFile !== file || showDaily) e.currentTarget.style.background = "var(--bg-secondary)";
+                }}
+                onMouseLeave={(e) => {
+                  if (selectedFile !== file || showDaily) e.currentTarget.style.background = "transparent";
                 }}
               >
+                <FileText size={14} style={{ color: "var(--text-muted)", flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 13, fontWeight: 500, fontFamily: "monospace" }}>{file}</div>
+                  <div style={{ fontSize: 11, color: "var(--text-muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                    {FILE_LABELS[file] || file}
+                  </div>
+                </div>
+              </button>
+            ))}
+          </div>
+
+          {/* Daily journals */}
+          <h3
+            style={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: "var(--text-muted)",
+              textTransform: "uppercase",
+              letterSpacing: "0.05em",
+              marginBottom: 8,
+            }}
+          >
+            Daily Journals ({dailyFiles.length})
+          </h3>
+          {dailyFiles.length === 0 ? (
+            <p style={{ fontSize: 12, color: "var(--text-muted)" }}>No journal entries yet.</p>
+          ) : (
+            <div
+              style={{
+                background: "var(--surface)",
+                border: "1px solid var(--border)",
+                borderRadius: "var(--radius)",
+                overflow: "hidden",
+                maxHeight: 200,
+                overflowY: "auto",
+              }}
+            >
+              {dailyFiles.map((file, i) => (
                 <button
-                  onClick={() => toggleExpand(item.id)}
+                  key={file}
+                  onClick={() => {
+                    setSelectedDate(file);
+                    setShowDaily(true);
+                  }}
                   style={{
                     width: "100%",
-                    padding: "14px 16px",
-                    background: "transparent",
                     display: "flex",
-                    alignItems: "flex-start",
-                    gap: 12,
+                    alignItems: "center",
+                    gap: 8,
+                    padding: "8px 14px",
+                    background: selectedDate === file && showDaily ? "var(--bg-secondary)" : "transparent",
+                    borderBottom: i < dailyFiles.length - 1 ? "1px solid var(--border)" : "none",
                     textAlign: "left",
+                    cursor: "pointer",
+                    fontSize: 13,
+                    fontFamily: "monospace",
                     transition: "background 0.1s",
                   }}
-                  onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
-                  onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
                 >
-                  {/* Expand icon */}
-                  <div style={{ marginTop: 2, flexShrink: 0, color: "var(--text-muted)" }}>
-                    {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-                  </div>
+                  <Calendar size={12} style={{ color: "var(--text-muted)" }} />
+                  {file.replace(".md", "")}
+                  <ChevronRight size={12} style={{ marginLeft: "auto", color: "var(--text-muted)" }} />
+                </button>
+              ))}
+            </div>
+          )}
+        </div>
 
-                  {/* Content */}
-                  <div style={{ flex: 1, minWidth: 0 }}>
-                    <div
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 8,
-                        marginBottom: 4,
-                        flexWrap: "wrap",
-                      }}
-                    >
-                      <span
-                        style={{
-                          fontFamily: "monospace",
-                          fontSize: 14,
-                          fontWeight: 600,
-                        }}
-                      >
-                        {item.key}
-                      </span>
-                      <span
-                        style={{
-                          fontSize: 10,
-                          fontWeight: 600,
-                          color: catConf.color,
-                          background: `color-mix(in srgb, ${catConf.color} 12%, transparent)`,
-                          padding: "2px 7px",
-                          borderRadius: 5,
-                          textTransform: "uppercase",
-                          letterSpacing: "0.04em",
-                        }}
-                      >
-                        {catConf.label}
-                      </span>
-                      <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>
-                        {timeAgo(item.updatedAt)}
-                      </span>
-                    </div>
-
-                    <p
-                      style={{
-                        fontSize: 13,
-                        color: "var(--text-muted)",
-                        lineHeight: 1.5,
-                        overflow: isExpanded ? "visible" : "hidden",
-                        textOverflow: isExpanded ? "unset" : "ellipsis",
-                        whiteSpace: isExpanded ? "pre-wrap" : "nowrap",
-                      }}
-                    >
-                      {item.value}
-                    </p>
-                  </div>
+        {/* Editor area */}
+        <div style={{ flex: 1, minWidth: 0 }}>
+          {showDaily && selectedDate ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>
+                    {selectedDate.replace(".md", "")}
+                  </h3>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Daily journal (read-only)</p>
+                </div>
+              </div>
+              <div
+                style={{
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: 16,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  whiteSpace: "pre-wrap",
+                  fontFamily: "monospace",
+                  minHeight: 300,
+                  color: dailyContent ? "var(--text)" : "var(--text-muted)",
+                }}
+              >
+                {dailyContent || "No entries for this day."}
+              </div>
+            </>
+          ) : selectedFile ? (
+            <>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
+                <div>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>
+                    {selectedFile}
+                  </h3>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
+                    {FILE_DESCRIPTIONS[selectedFile] || ""}
+                  </p>
+                </div>
+                <button
+                  onClick={handleSave}
+                  disabled={!hasChanges || saving}
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 6,
+                    padding: "8px 14px",
+                    borderRadius: 8,
+                    fontSize: 13,
+                    fontWeight: 500,
+                    background: hasChanges ? "var(--accent)" : "var(--border)",
+                    color: "#fff",
+                    cursor: hasChanges && !saving ? "pointer" : "default",
+                    transition: "background 0.15s",
+                    opacity: hasChanges ? 1 : 0.5,
+                  }}
+                >
+                  {saved ? <Check size={14} /> : <Save size={14} />}
+                  {saving ? "Saving..." : saved ? "Saved" : "Save"}
                 </button>
               </div>
-            );
-          })}
+              <textarea
+                value={content}
+                onChange={(e) => setContent(e.target.value)}
+                disabled={loading}
+                style={{
+                  width: "100%",
+                  minHeight: 400,
+                  background: "var(--surface)",
+                  border: "1px solid var(--border)",
+                  borderRadius: "var(--radius)",
+                  padding: 16,
+                  fontSize: 14,
+                  lineHeight: 1.7,
+                  fontFamily: "monospace",
+                  resize: "vertical",
+                  color: "var(--text)",
+                }}
+                placeholder={`Edit ${selectedFile}...`}
+              />
+              {hasChanges && (
+                <p style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}>
+                  Unsaved changes. Press Ctrl+S or click Save.
+                </p>
+              )}
+            </>
+          ) : (
+            <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
+              Select a file to edit.
+            </div>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
