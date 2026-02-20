@@ -141,7 +141,7 @@ export default function AgentDashboard() {
 
         {/* Content area */}
         <div style={{ flex: 1, overflow: "auto" }}>
-          <Outlet context={{ agent }} />
+          <Outlet context={{ agent, onAgentUpdate: setAgent }} />
         </div>
 
         {/* Mobile bottom tab bar */}

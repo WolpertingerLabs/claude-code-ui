@@ -14,14 +14,14 @@ This two-layer approach gives clean separation: workspace protocol lives in file
 
 ---
 
-## Current State (Phase 1 + Early Phase 2 — In Progress)
+## Current State (Phase 1 + Phase 2 — Complete)
 
-Phase 1 established the foundation: agent CRUD, the full dashboard UI shell, and navigation. Early Phase 2 work has added workspace scaffolding, identity compilation, system prompt injection, and the agent chat flow from the main chat list.
+Phase 1 established the foundation: agent CRUD, the full dashboard UI shell, and navigation. Phase 2 added workspace scaffolding, identity compilation, system prompt injection, agent chat flow, operational data services (cron jobs, activity logs), workspace file editing, and wired all dashboard pages to real APIs (removing all mock data).
 
 ### What Exists Today
 
 **Shared Types** (`shared/types/`)
-- `agent.ts` — `AgentConfig` interface with full identity fields:
+- `agent.ts` — `AgentConfig` interface with full identity fields + event subscriptions:
   ```typescript
   export interface AgentConfig {
     // Core
@@ -46,9 +46,12 @@ Phase 1 established the foundation: agent CRUD, the full dashboard UI shell, and
     userTimezone?: string;
     userLocation?: string;
     userContext?: string;
+
+    // Event subscriptions
+    eventSubscriptions?: EventSubscription[];
   }
   ```
-- `agentFeatures.ts` — `CronJob`, `CronAction`, `ActivityEntry` interfaces (ChatMessage, Connection, MemoryItem, Trigger removed — see §2.4)
+- `agentFeatures.ts` — `CronJob`, `CronAction`, `EventSubscription`, `ActivityEntry` interfaces (ChatMessage, Connection, MemoryItem, Trigger removed — see §2.4)
 
 **Backend** (`backend/src/`)
 - `services/agent-file-service.ts` — File-based agent persistence. Stores configs at `data/agents/{alias}/agent.json`. Exports: `isValidAlias`, `agentExists`, `createAgent`, `getAgent`, `listAgents`, `deleteAgent`
@@ -56,6 +59,12 @@ Phase 1 established the foundation: agent CRUD, the full dashboard UI shell, and
   - `compileIdentityPrompt(config: AgentConfig): string` — Builds markdown identity string from structured settings (name, emoji, role, personality, tone, pronouns, languages, user context, guidelines). Omits sections with no data.
   - `scaffoldWorkspace(workspacePath: string): void` — Copies all 6 scaffold template files + creates CLAUDE.md (from AGENTS.md) + `memory/` subdirectory. Skips files that already exist.
   - `readWorkspaceFile(workspacePath: string, filename: string): string | undefined` — Helper to read workspace files.
+- `services/agent-cron-jobs.ts` — File-based CRUD for agent cron jobs:
+  - Persists at `data/agents/{alias}/cron-jobs.json`
+  - Exports: `listCronJobs`, `getCronJob`, `createCronJob` (auto-generates UUID), `updateCronJob`, `deleteCronJob`
+- `services/agent-activity.ts` — Append-only activity log:
+  - Persists at `data/agents/{alias}/activity.jsonl` (JSONL format)
+  - Exports: `appendActivity` (auto-generates id + timestamp), `getActivity` (with type filter, limit, offset, sorted newest-first)
 - `services/claude.ts` — Claude Code SDK integration:
   - `sendMessage(opts)` — Creates/resumes Claude sessions via `@anthropic-ai/claude-agent-sdk`
   - `SendMessageOptions` — `{ prompt, chatId?, folder?, defaultPermissions?, maxTurns?, activePlugins?, imageMetadata?, systemPrompt? }`
@@ -63,15 +72,33 @@ Phase 1 established the foundation: agent CRUD, the full dashboard UI shell, and
   - Returns an `EventEmitter` that emits `StreamEvent`s
   - `respondToPermission(chatId, approved)` — Resolves pending permission requests
   - `getActiveSession(chatId)` / `stopSession(chatId)` — Session lifecycle
-- `routes/agents.ts` — Express Router with full CRUD + identity:
+- `routes/agents.ts` — Express Router with full CRUD + identity + sub-router mounts:
   - `GET /api/agents` — List all agents with resolved `workspacePath`
-  - `POST /api/agents` — Create agent + scaffold workspace with template files
+  - `POST /api/agents` — Create agent + scaffold workspace (accepts emoji, personality, role, tone)
   - `GET /api/agents/:alias` — Get single agent with `workspacePath`
   - `GET /api/agents/:alias/identity-prompt` — Returns compiled identity prompt string
-  - `PUT /api/agents/:alias` — Partial update for all config fields (identity, user context, etc.)
+  - `PUT /api/agents/:alias` — Partial update for all config fields (identity, user context, eventSubscriptions, etc.)
   - `DELETE /api/agents/:alias` — Delete agent + clean up workspace directory
+  - Mounts sub-routers: workspace, memory, cron-jobs, activity
   - Workspace path resolved via `CCUI_AGENTS_DIR` env var (default: `~/.ccui-agents`)
   - Auto-heals missing workspace dirs on GET requests
+- `routes/agent-workspace.ts` — Workspace file read/write:
+  - `GET /api/agents/:alias/workspace` — List available workspace files
+  - `GET /api/agents/:alias/workspace/:filename` — Read a workspace file
+  - `PUT /api/agents/:alias/workspace/:filename` — Write a workspace file
+  - Restricted to allowed files: SOUL.md, USER.md, TOOLS.md, HEARTBEAT.md, MEMORY.md, AGENTS.md, CLAUDE.md
+- `routes/agent-memory.ts` — Memory file access:
+  - `GET /api/agents/:alias/memory` — List daily memory files + read curated MEMORY.md
+  - `GET /api/agents/:alias/memory/:date` — Read a specific daily memory file
+- `routes/agent-cron-jobs.ts` — Cron job CRUD:
+  - `GET /api/agents/:alias/cron-jobs` — List all cron jobs
+  - `GET /api/agents/:alias/cron-jobs/:jobId` — Get single cron job
+  - `POST /api/agents/:alias/cron-jobs` — Create cron job
+  - `PUT /api/agents/:alias/cron-jobs/:jobId` — Update cron job
+  - `DELETE /api/agents/:alias/cron-jobs/:jobId` — Delete cron job
+- `routes/agent-activity.ts` — Activity log:
+  - `GET /api/agents/:alias/activity` — Query activity (with type filter, limit, offset)
+  - `POST /api/agents/:alias/activity` — Append new activity entry
 - `routes/stream.ts` — SSE streaming:
   - `POST /api/stream/new/message` — Start new chat session (accepts optional `systemPrompt` in request body)
   - `POST /api/stream/:chatId/message` — Send message to existing session
@@ -95,11 +122,17 @@ On agent creation, all 6 files are copied to the workspace, plus AGENTS.md → C
   - On agent chat start: fetches compiled identity prompt → navigates to `/chat/new?folder={workspacePath}` with `{ defaultPermissions: allAllow, systemPrompt }` in location state
 - `Chat.tsx` — Reads `systemPrompt` from location state, includes it in the new chat stream request body so the backend passes it to the SDK
 - `agents/AgentList.tsx` — Agent list page with create/delete, navigation to chat view
-- `agents/CreateAgent.tsx` — Agent creation form (name, alias auto-gen, description, system prompt)
-- `agents/AgentDashboard.tsx` — Dashboard layout with sidebar nav (desktop) / bottom tab bar (mobile)
-- `agents/dashboard/` — Overview, Chat, CronJobs, Connections, Events (was Triggers), Activity, Memory sub-pages (using mock data, to be wired in §2.7)
-- `agents/dashboard/mockData.ts` — Mock data powering dashboard pages (to be replaced)
-- `api.ts` — Agent API functions: `listAgents`, `getAgent`, `createAgent`, `updateAgent`, `deleteAgent`, `getAgentIdentityPrompt`
+- `agents/CreateAgent.tsx` — Agent creation form with structured identity fields (name, alias auto-gen, description, emoji, role, personality, tone)
+- `agents/AgentDashboard.tsx` — Dashboard layout with sidebar nav (desktop) / bottom tab bar (mobile); passes `onAgentUpdate` via outlet context for child pages to sync state
+- `agents/dashboard/` — All sub-pages wired to real APIs (no mock data):
+  - `Overview.tsx` — Identity settings form (emoji, role, personality, tone, pronouns, user context) + stats cards (cron jobs, event subscriptions) + recent activity
+  - `Chat.tsx` — Chat interface (mock auto-replies until Phase 3 wires real sessions)
+  - `CronJobs.tsx` — Full CRUD: create form with name/schedule/type/description/prompt, pause/resume, delete
+  - `Connections.tsx` — Read-only proxy status view showing known mcp-secure-proxy connections
+  - `Events.tsx` — Event subscription toggles (persisted to `agent.eventSubscriptions`) + event activity feed
+  - `Activity.tsx` — Timeline with type filter pills, fetched from real JSONL backend
+  - `Memory.tsx` — Workspace file editor (SOUL.md, USER.md, TOOLS.md, etc.) with Ctrl+S save + daily journal viewer (read-only)
+- `api.ts` — Agent API functions: `listAgents`, `getAgent`, `createAgent` (with identity fields), `updateAgent`, `deleteAgent`, `getAgentIdentityPrompt`, `getWorkspaceFiles`, `getWorkspaceFile`, `updateWorkspaceFile`, `getAgentMemory`, `getAgentDailyMemory`, `getAgentCronJobs`, `createAgentCronJob`, `updateAgentCronJob`, `deleteAgentCronJob`, `getAgentActivity`
 
 **Routing** — Agent routes in `App.tsx`:
 ```
@@ -109,14 +142,14 @@ On agent creation, all 6 files are copied to the workspace, plus AGENTS.md → C
 /agents/:alias/chat        → Chat
 /agents/:alias/cron        → CronJobs
 /agents/:alias/connections → Connections
-/agents/:alias/triggers    → Events (to be renamed)
+/agents/:alias/events      → Events
 /agents/:alias/activity    → Activity
 /agents/:alias/memory      → Memory
 ```
 
 **Navigation** — Symmetrical icon buttons: ChatList header has a Bot icon → `/agents`, AgentList header has a MessageSquare icon → `/`
 
-**Data Directory** — `data/agents/` for agent config storage; `~/.ccui-agents/` for agent workspaces
+**Data Directory** — `data/agents/{alias}/` for agent config storage (`agent.json`, `cron-jobs.json`, `activity.jsonl`); `~/.ccui-agents/{alias}/` for agent workspaces
 
 **CSS Variables** — `--success` and `--warning` added for dashboard status indicators
 
@@ -252,9 +285,9 @@ This means **any process** with the right keypair can talk to the remote server 
 
 ---
 
-## Phase 2: Agent Workspace & Memory (Remaining Work)
+## Phase 2: Agent Workspace & Memory ✅
 
-**Goal**: Complete the workspace-based architecture. Early Phase 2 items (workspace scaffolding, identity compilation, system prompt injection) are done. Remaining work: operational data services, workspace file editing, and wiring the dashboard to real APIs.
+**Goal**: Complete the workspace-based architecture. All items complete: workspace scaffolding, identity compilation, system prompt injection, operational data services, workspace file editing, and dashboard wired to real APIs.
 
 ### 2.1 — Workspace Directory Structure ✅
 
@@ -295,7 +328,7 @@ The `AgentConfig` interface holds comprehensive structured identity settings alo
 - `scaffoldWorkspace(workspacePath)` copies template files on agent creation
 - Identity is injected via SDK `systemPrompt: { type: 'preset', preset: 'claude_code', append }` — not written to CLAUDE.md
 
-### 2.4 — Revised Shared Types (Partially Complete — Needs Second Pass)
+### 2.4 — Revised Shared Types ✅
 
 **First pass (done):** Removed `ChatMessage`, `MemoryItem`, `Connection` from shared types. Added `TriggerAction`. Updated `CronJob` with `action`. Updated `ActivityEntry` with `metadata`. Updated frontend mock data with local types.
 
@@ -330,7 +363,7 @@ Changes needed:
 
 **Frontend dashboard components** — Already updated to use local mock types (`MockChatMessage` in `Chat.tsx`, `MockConnection` in `Connections.tsx`). Mock triggers page will be revised in §2.7 to become an event monitoring view.
 
-### 2.5 — Backend Services for Operational Data
+### 2.5 — Backend Services for Operational Data ✅
 
 Minimal scope — no connections or triggers services needed:
 
@@ -353,7 +386,7 @@ Create file-based services following the existing `chat-file-service.ts` pattern
 **Removed:** `agent-connections.ts` — connections are managed by mcp-secure-proxy, not us.
 **Removed:** `agent-triggers.ts` — triggers eliminated as CRUD entities. Event subscriptions are stored in `agent.json` as part of `AgentConfig`, managed via the existing `PUT /api/agents/:alias` endpoint.
 
-### 2.6 — Backend Routes (Remaining)
+### 2.6 — Backend Routes ✅
 
 Mount sub-routes under the existing agents router:
 
@@ -375,7 +408,7 @@ Mount sub-routes under the existing agents router:
 
 This is optional — the frontend could also call the proxy MCP tools directly via the existing plugin infrastructure. But a thin REST passthrough makes the dashboard simpler (no MCP session needed for read-only status checks).
 
-### 2.7 — Frontend: Dashboard Overhaul
+### 2.7 — Frontend: Dashboard Overhaul ✅
 
 The dashboard sub-pages need significant rework to match the new model:
 
@@ -423,9 +456,9 @@ The dashboard sub-pages need significant rework to match the new model:
 - Add optional "User context" section: userName, userTimezone
 - Keep it simple for creation — full settings editing is on the Overview page after creation
 
-Remove `mockData.ts` when all pages are wired up.
+`mockData.ts` has been removed — all pages are wired to real APIs.
 
-### 2.8 — Verification
+### 2.8 — Verification ✅
 
 - Creating an agent produces a full workspace directory with CLAUDE.md + all scaffold files
 - `GET /api/agents/:alias/identity-prompt` returns compiled identity from structured settings
@@ -958,16 +991,12 @@ Phase 1 ✅  Foundation (agent CRUD, dashboard UI, navigation)
     ├── ✅  GET /api/agents/:alias/identity-prompt
     │
     ▼
-Phase 2     Workspace & Memory (remaining)
-    │       - §2.4: Revised types — second pass (remove Trigger/TriggerAction,
-    │         add EventSubscription to AgentConfig, add CronAction)
-    │       - §2.5: Operational data services (cron, activity — NO connections or triggers)
-    │       - §2.6: Workspace file read/write API endpoints + cron/activity routes
-    │       - §2.7: Dashboard: Overview → settings form, Memory → file editor
-    │       - §2.7: Dashboard: Connections → read-only proxy status
-    │       - §2.7: Dashboard: Events page → subscriptions + event activity feed
-    │       - §2.7: Wire dashboard pages to real APIs, remove mockData.ts
-    │       - §2.7: CreateAgent form expansion (structured identity fields)
+Phase 2 ✅  Workspace & Memory
+    │       - §2.4: ✅ Revised types (EventSubscription, CronAction added; Trigger removed)
+    │       - §2.5: ✅ Operational data services (cron-jobs.ts, activity.ts)
+    │       - §2.6: ✅ Backend routes (workspace, memory, cron-jobs, activity)
+    │       - §2.7: ✅ Dashboard overhaul (all pages wired to real APIs, mockData.ts removed)
+    │       - §2.7: ✅ CreateAgent form expansion (structured identity fields)
     │
     ▼
 Phase 3     Execution Engine

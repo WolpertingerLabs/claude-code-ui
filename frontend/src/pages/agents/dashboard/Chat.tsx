@@ -2,9 +2,15 @@ import { useState, useRef, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Send, Bot, User } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockMessages } from "./mockData";
-import type { MockChatMessage } from "./mockData";
 import type { AgentConfig } from "shared";
+
+/** Mock chat message type — will be replaced by real Claude SDK sessions in Phase 3 */
+interface MockChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  timestamp: number;
+}
 
 function formatTime(ts: number): string {
   const d = new Date(ts);
@@ -21,7 +27,7 @@ function formatTime(ts: number): string {
 export default function Chat() {
   const { agent } = useOutletContext<{ agent: AgentConfig }>();
   const isMobile = useIsMobile();
-  const [messages, setMessages] = useState<MockChatMessage[]>(mockMessages);
+  const [messages, setMessages] = useState<MockChatMessage[]>([]);
   const [input, setInput] = useState("");
   const [typing, setTyping] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);

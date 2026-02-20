@@ -1,10 +1,10 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { Radio, CircleOff } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockEventSubscriptions, mockActivity } from "./mockData";
-import type { EventSubscription, ActivityEntry } from "./mockData";
-import type { AgentConfig } from "shared";
+import { updateAgent, getAgentActivity } from "../../../api";
+import type { AgentConfig, ActivityEntry } from "../../../api";
+import type { EventSubscription } from "shared";
 
 function timeAgo(ts: number): string {
   const diff = Date.now() - ts;
@@ -17,19 +17,60 @@ function timeAgo(ts: number): string {
   return `${days}d ago`;
 }
 
+// Default connections available via mcp-secure-proxy
+const DEFAULT_CONNECTIONS = [
+  "discord-bot",
+  "github",
+  "slack",
+  "stripe",
+  "trello",
+  "notion",
+  "linear",
+];
+
 export default function Events() {
-  useOutletContext<{ agent: AgentConfig }>();
+  const { agent, onAgentUpdate } = useOutletContext<{ agent: AgentConfig; onAgentUpdate?: (agent: AgentConfig) => void }>();
   const isMobile = useIsMobile();
-  const [subscriptions, setSubscriptions] = useState<EventSubscription[]>(mockEventSubscriptions);
+  const [subscriptions, setSubscriptions] = useState<EventSubscription[]>([]);
+  const [eventActivity, setEventActivity] = useState<ActivityEntry[]>([]);
+  const [saving, setSaving] = useState(false);
 
-  const eventActivity: ActivityEntry[] = mockActivity.filter((a) => a.type === "event");
+  // Initialize subscriptions from agent config, filling in defaults
+  useEffect(() => {
+    const existing = agent.eventSubscriptions || [];
+    const existingAliases = new Set(existing.map((s) => s.connectionAlias));
 
-  const toggleSubscription = (alias: string) => {
-    setSubscriptions((prev) =>
-      prev.map((s) =>
-        s.connectionAlias === alias ? { ...s, enabled: !s.enabled } : s,
-      ),
+    const merged = [
+      ...existing,
+      ...DEFAULT_CONNECTIONS
+        .filter((alias) => !existingAliases.has(alias))
+        .map((alias) => ({ connectionAlias: alias, enabled: false })),
+    ];
+    setSubscriptions(merged);
+  }, [agent.eventSubscriptions]);
+
+  // Load event activity
+  useEffect(() => {
+    getAgentActivity(agent.alias, "event", 20)
+      .then(setEventActivity)
+      .catch(() => setEventActivity([]));
+  }, [agent.alias]);
+
+  const toggleSubscription = async (alias: string) => {
+    const updated = subscriptions.map((s) =>
+      s.connectionAlias === alias ? { ...s, enabled: !s.enabled } : s,
     );
+    setSubscriptions(updated);
+
+    setSaving(true);
+    try {
+      const updatedAgent = await updateAgent(agent.alias, { eventSubscriptions: updated });
+      onAgentUpdate?.(updatedAgent);
+    } catch {
+      setSubscriptions(subscriptions);
+    } finally {
+      setSaving(false);
+    }
   };
 
   const enabledCount = subscriptions.filter((s) => s.enabled).length;
@@ -57,6 +98,7 @@ export default function Events() {
           }}
         >
           Subscriptions ({enabledCount}/{subscriptions.length})
+          {saving && <span style={{ fontSize: 11, fontWeight: 400, marginLeft: 8 }}>Saving...</span>}
         </h2>
         <div
           style={{
@@ -122,6 +164,7 @@ export default function Events() {
               </div>
               <button
                 onClick={() => toggleSubscription(sub.connectionAlias)}
+                disabled={saving}
                 style={{
                   padding: "6px 14px",
                   borderRadius: 6,
@@ -131,10 +174,11 @@ export default function Events() {
                   color: sub.enabled ? "var(--warning)" : "var(--success)",
                   border: `1px solid color-mix(in srgb, ${sub.enabled ? "var(--warning)" : "var(--success)"} 30%, transparent)`,
                   transition: "background 0.15s",
-                  cursor: "pointer",
+                  cursor: saving ? "not-allowed" : "pointer",
+                  opacity: saving ? 0.6 : 1,
                 }}
                 onMouseEnter={(e) =>
-                  (e.currentTarget.style.background = `color-mix(in srgb, ${sub.enabled ? "var(--warning)" : "var(--success)"} 10%, transparent)`)
+                  !saving && (e.currentTarget.style.background = `color-mix(in srgb, ${sub.enabled ? "var(--warning)" : "var(--success)"} 10%, transparent)`)
                 }
                 onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
               >
@@ -175,7 +219,7 @@ export default function Events() {
               borderRadius: "var(--radius)",
             }}
           >
-            No event activity yet.
+            No event activity yet. Events will appear here when the agent responds to external events.
           </div>
         ) : (
           <div

@@ -1,9 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useOutletContext } from "react-router-dom";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import { mockActivity } from "./mockData";
-import type { ActivityEntry } from "./mockData";
-import type { AgentConfig } from "shared";
+import { getAgentActivity } from "../../../api";
+import type { ActivityEntry, AgentConfig } from "../../../api";
 
 const typeColors: Record<string, string> = {
   chat: "var(--accent)",
@@ -44,12 +43,20 @@ function formatTimestamp(ts: number): string {
 }
 
 export default function Activity() {
-  useOutletContext<{ agent: AgentConfig }>();
+  const { agent } = useOutletContext<{ agent: AgentConfig }>();
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<(typeof filterOptions)[number]>("all");
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  const filtered: ActivityEntry[] =
-    filter === "all" ? mockActivity : mockActivity.filter((a) => a.type === filter);
+  useEffect(() => {
+    let cancelled = false;
+    const type = filter === "all" ? undefined : filter;
+    getAgentActivity(agent.alias, type, 100)
+      .then((data) => { if (!cancelled) { setEntries(data); setLoading(false); } })
+      .catch(() => { if (!cancelled) { setEntries([]); setLoading(false); } });
+    return () => { cancelled = true; };
+  }, [agent.alias, filter]);
 
   return (
     <div style={{ padding: isMobile ? "16px" : "24px 32px", maxWidth: 800, margin: "0 auto" }}>
@@ -99,7 +106,11 @@ export default function Activity() {
       </div>
 
       {/* Timeline */}
-      {filtered.length === 0 ? (
+      {loading ? (
+        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
+          Loading activity...
+        </div>
+      ) : entries.length === 0 ? (
         <div
           style={{
             textAlign: "center",
@@ -108,7 +119,7 @@ export default function Activity() {
             fontSize: 14,
           }}
         >
-          No activity matching this filter.
+          {filter === "all" ? "No activity yet. Activity will appear here as the agent runs." : "No activity matching this filter."}
         </div>
       ) : (
         <div style={{ position: "relative" }}>
@@ -125,7 +136,7 @@ export default function Activity() {
           />
 
           <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-            {filtered.map((entry) => {
+            {entries.map((entry) => {
               const color = typeColors[entry.type] || "var(--text-muted)";
               return (
                 <div
