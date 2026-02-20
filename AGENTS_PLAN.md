@@ -476,91 +476,195 @@ The dashboard sub-pages need significant rework to match the new model:
 
 ---
 
-## Phase 3: Agent Execution Engine
+## Phase 3: Agent Custom Tools & Session Integration
 
-**Goal**: Agents can programmatically create and manage Claude Code sessions. The execution model: compile identity → inject via `systemPrompt.append` → set `folder` to workspace → call `sendMessage()`.
+**Goal**: Agents become autonomous platform actors. Instead of building separate agent chat routes, we inject **custom SDK tools** into agent sessions via the existing chat flow, giving agents programmatic access to the CCUI platform APIs — spinning off other agents, creating cron jobs, reading sessions, logging events, etc.
 
-### 3.1 — Agent Executor Service
+**Key design decisions**:
+- **No separate agent chat routes.** The existing `/api/stream/*` routes and `Chat.tsx` page already handle agent sessions end-to-end (identity injection, workspace folder, SSE streaming). No duplication needed.
+- **No separate session storage.** Agent sessions are regular Claude Code sessions stored in standard logs. We tag chat metadata with `agentAlias` for ownership tracking.
+- **Always run in workspace folder.** Agents always run in `~/.ccui-agents/{alias}/` — no folder override. This ensures access to `CLAUDE.md` (behavioral protocol), `MEMORY.md`, daily journals, and all workspace files. If the agent needs to work on a different project, it uses absolute paths via its tools.
+- **Custom tools via `createSdkMcpServer()`**. The Claude Agent SDK supports in-process MCP servers with custom tools (see https://platform.claude.com/docs/en/agent-sdk/custom-tools). We define a `ccui` MCP server that gives agents access to platform APIs. These tools run in the backend process — no HTTP round-trips.
+- **Async generator prompt format required.** Custom MCP tools require the SDK `prompt` parameter to be an `AsyncIterable`, not a plain string. `sendMessage()` already handles this for image attachments — same pattern.
+- **Event persistence.** All ingestor events from mcp-secure-proxy are stored and tracked in the activity log as they arrive, creating a complete audit trail.
 
-**New file: `backend/src/services/agent-executor.ts`**
+### 3.1 — Custom Agent Tools MCP Server
 
-The bridge between agent config and the existing `sendMessage()` function:
+**New file: `backend/src/services/agent-tools.ts`**
+
+An in-process MCP server created with `createSdkMcpServer()` from `@anthropic-ai/claude-agent-sdk`. Each tool wraps an existing CCUI backend service, giving the agent programmatic access to platform capabilities during its session.
 
 ```typescript
-export interface AgentExecutionOptions {
-  agentAlias: string;
-  prompt: string;
-  folder?: string;              // Override — defaults to agent's workspace path
-  triggeredBy?: { type: "cron" | "event" | "heartbeat" | "manual"; id?: string };
-  chatId?: string;              // Resume existing session
+import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
+import { z } from "zod";
+
+/**
+ * Build a custom MCP server scoped to a specific agent.
+ * The agentAlias is baked into the closure so the agent can only
+ * access its own resources by default, but can reference other agents
+ * for orchestration tools.
+ */
+export function buildAgentToolsServer(agentAlias: string) {
+  return createSdkMcpServer({
+    name: "ccui",
+    version: "1.0.0",
+    tools: [
+      // --- Agent Orchestration ---
+      startAgentSession,      // Spin off a session for another (or self) agent
+      getSessionStatus,       // Check if a session is active/complete/errored
+      readSessionMessages,    // Read the output of a completed session
+
+      // --- Cron Job Management ---
+      listCronJobs,           // List this agent's cron jobs
+      createCronJob,          // Schedule a new recurring task
+      updateCronJob,          // Modify an existing cron job
+      deleteCronJob,          // Remove a cron job
+
+      // --- Activity & Events ---
+      getActivity,            // Query this agent's activity log
+      logActivity,            // Append an entry to the activity log
+
+      // --- Agent Discovery ---
+      listAgents,             // List all agents on the platform
+      getAgentInfo,           // Get another agent's config (name, role, description)
+    ],
+  });
 }
-
-export async function executeAgent(opts: AgentExecutionOptions): Promise<{
-  chatId: string;
-  emitter: EventEmitter;
-}>
 ```
 
-Key responsibilities:
-1. Load the agent's config from `data/agents/{alias}/agent.json`
-2. Call `compileIdentityPrompt(config)` to build the identity string
-3. Determine `folder` — use override, or agent's `defaultFolder`, or fall back to workspace path
-4. Call `sendMessage()` with `{ prompt, folder, defaultPermissions, maxTurns, activePlugins, systemPrompt: identityString }` from agent config
-5. Link the created session to the agent in `data/agents/{alias}/sessions/`
-6. Log lifecycle events to the agent's activity feed
-7. On session complete: append a summary entry to today's `memory/YYYY-MM-DD.md`
+#### Tool Definitions (detailed)
 
-**What the executor does NOT do** (because the two-layer prompt handles it):
-- ~~Manually build prompts by concatenating personality + context~~ → `compileIdentityPrompt()` builds the identity string, SDK's `systemPrompt.append` injects it
-- ~~Write to CLAUDE.md~~ → CLAUDE.md is the static workspace protocol, not dynamically compiled
-- ~~Format memory items~~ → Agent reads `MEMORY.md` and daily journals itself per workspace protocol in CLAUDE.md
+**Agent Orchestration:**
 
-**mcp-secure-proxy in agent sessions**: The executor ensures `activePlugins` includes the mcp-secure-proxy plugin so agents can call `secure_request`, `poll_events`, etc. during their sessions. The agent gets the same external service access as a regular Claude Code session — no special wiring needed.
+| Tool | Description | Input | What It Does |
+|------|-------------|-------|-------------|
+| `start_agent_session` | Start a new Claude Code session for any agent | `{ targetAgent: string, prompt: string, maxTurns?: number }` | Loads target agent config, compiles identity, calls `sendMessage()` with workspace folder + identity + CCUI tools. Returns `{ chatId }`. The spawned session is independent — it runs asynchronously. |
+| `get_session_status` | Check if a session is active, complete, or errored | `{ chatId: string }` | Queries `getActiveSession()` and session log. Returns `{ status: "active" \| "complete" \| "error" \| "not_found", lastActivity? }` |
+| `read_session_messages` | Read the messages/output from a session | `{ chatId: string, limit?: number }` | Reads the session's JSONL log, extracts assistant text messages. Returns the conversation content. |
 
-Plugin loading for agents:
-- mcp-secure-proxy is auto-discovered via `.mcp.json` in its repo, or installed globally as a plugin (`/plugin install mcp-secure-proxy`)
-- The SDK spawns the local MCP proxy as a stdio child process when the session starts
-- The proxy handles handshake + encrypted communication to the remote server transparently
-- All 4 proxy tools (`secure_request`, `poll_events`, `list_routes`, `ingestor_status`) become available in the agent's tool palette
-- The agent's identity prompt can reference these tools (e.g., guidelines like "Check Discord for new messages using poll_events")
+**Cron Job Management:**
 
-### 3.2 — Agent Chat Routes
+| Tool | Description | Input | What It Does |
+|------|-------------|-------|-------------|
+| `list_cron_jobs` | List all cron jobs for this agent | `{}` | Calls `listCronJobs(agentAlias)` from agent-cron-jobs service |
+| `create_cron_job` | Create a new scheduled task | `{ name, schedule, prompt, type?, description? }` | Calls `createCronJob(agentAlias, ...)`. Returns the created job. |
+| `update_cron_job` | Update an existing cron job | `{ jobId, name?, schedule?, prompt?, status? }` | Calls `updateCronJob(agentAlias, jobId, ...)` |
+| `delete_cron_job` | Delete a cron job | `{ jobId }` | Calls `deleteCronJob(agentAlias, jobId)` |
 
-**New file: `backend/src/routes/agent-chat.ts`**
+**Activity & Events:**
 
+| Tool | Description | Input | What It Does |
+|------|-------------|-------|-------------|
+| `get_activity` | Query the activity log | `{ type?: string, limit?: number }` | Calls `getActivity(agentAlias, ...)`. Returns recent activity entries. |
+| `log_activity` | Record an activity entry | `{ type, message, metadata? }` | Calls `appendActivity(agentAlias, ...)`. For agents to explicitly log events. |
+
+**Agent Discovery:**
+
+| Tool | Description | Input | What It Does |
+|------|-------------|-------|-------------|
+| `list_agents` | List all agents on the platform | `{}` | Calls `listAgents()`. Returns `[{ alias, name, emoji, role, description }]` — just enough to identify and orchestrate, not full configs. |
+| `get_agent_info` | Get another agent's public info | `{ alias: string }` | Calls `getAgent(alias)`. Returns name, emoji, role, description, personality. Not sensitive fields. |
+
+#### Security Boundary
+
+- Tools scoped to `agentAlias` (cron jobs, activity) only access that agent's data
+- Orchestration tools (`start_agent_session`) can target other agents — this is intentional for agent-to-agent workflows
+- `read_session_messages` can read any session — needed so an orchestrating agent can check what a spawned agent did
+- No tool exposes credentials, secrets, or mcp-secure-proxy connection details
+
+### 3.2 — Integrate Custom Tools into sendMessage()
+
+Modify `backend/src/services/claude.ts` to support custom MCP servers:
+
+**Changes to `SendMessageOptions`:**
+```typescript
+interface SendMessageOptions {
+  // ... existing fields ...
+  agentAlias?: string;              // NEW — if set, injects CCUI custom tools
+  customMcpServers?: Record<string, any>;  // NEW — in-process MCP servers
+}
 ```
-POST   /api/agents/:alias/chat/new             — Start new agent session
-POST   /api/agents/:alias/chat/:chatId/message  — Send message to existing session
-GET    /api/agents/:alias/chat/:chatId/stream    — SSE stream for agent session
-GET    /api/agents/:alias/sessions              — List all sessions owned by this agent
+
+**Changes to `sendMessage()` body:**
+1. When `agentAlias` is provided, call `buildAgentToolsServer(agentAlias)` and merge into the SDK's `mcpServers` option alongside any existing MCP servers (from plugins)
+2. Ensure the prompt is wrapped as an async generator when custom MCP servers are present (SDK requirement). The existing `buildFormattedPrompt()` already returns an `AsyncIterable` for image messages — extend this to always return an iterable when MCP servers are in play.
+3. Add `mcp__ccui__*` to `allowedTools` so the agent can use all CCUI tools
+
+**Changes to `stream.ts`:**
+The `POST /api/stream/new/message` route already accepts `systemPrompt` in the request body. Add `agentAlias` to the request body so it can be passed through to `sendMessage()`:
+```typescript
+const { folder, prompt, defaultPermissions, imageIds, activePlugins, branchConfig, maxTurns, systemPrompt, agentAlias } = req.body;
+// ...
+const emitter = await sendMessage({
+  prompt,
+  folder: effectiveFolder,
+  defaultPermissions,
+  // ...
+  systemPrompt,
+  agentAlias,  // NEW — triggers custom tool injection
+});
 ```
 
-These routes use `executeAgent()` rather than calling `sendMessage()` directly.
+### 3.3 — Session Ownership & Chat Metadata
 
-### 3.3 — Frontend Chat Integration
+**Tag agent sessions with `agentAlias`:**
+When `sendMessage()` creates a new chat record (on session_id arrival), if `agentAlias` is provided, store it in the chat metadata:
+```typescript
+const meta = {
+  ...initialMetadata,
+  session_ids: [sessionId],
+  agentAlias,  // NEW — links this chat to the agent
+};
+```
 
-Update `dashboard/Chat.tsx` to replace mock auto-replies with real Claude Code sessions:
-- User types message → `POST /api/agents/:alias/chat/new` → streams response via SSE
-- Session history pulled from the agent's linked sessions
-- Reuse existing SSE consumption patterns from `frontend/src/pages/Chat.tsx`
+**Frontend: Agent badge in ChatList:**
+- `ChatList.tsx` already fetches chat metadata. If `metadata.agentAlias` is present, display the agent's emoji + name as a badge on the chat card.
+- `GET /api/chats` response already includes metadata — no new API needed.
 
-### 3.4 — Session Ownership
+**Frontend: Dashboard Chat page → Agent's sessions list:**
+- Replace the mock auto-reply UI in `dashboard/Chat.tsx` with a filtered view of the agent's real conversations
+- Fetch all chats from `GET /api/chats`, filter by `metadata.agentAlias === alias`
+- Each chat card links to `/chat/:id` (the existing main chat view)
+- "New Chat" button triggers the same flow as the ChatList agent mode: fetch identity prompt → navigate to `/chat/new?folder={workspacePath}` with `{ systemPrompt, defaultPermissions: allAllow, agentAlias }` in location state
 
-Agent sessions appear in **both** views:
-- In the agent's dashboard (under Chat / Sessions) — filtered to that agent's sessions
-- In the main chat list (at `/`) — marked with an agent badge so users can see which agent owns which session
+### 3.4 — Event Persistence
 
-Add an `agentAlias` field to the chat metadata so the main ChatList can display ownership.
+All ingestor events from mcp-secure-proxy should be stored and tracked as they happen, creating a complete audit trail visible in the dashboard.
+
+**Enriched activity entries for events:**
+```typescript
+// When an event arrives (via poll_events in Phase 4, or logged by agent via ccui tool)
+appendActivity(agentAlias, {
+  type: "event",
+  message: `Event from ${source}: ${eventType}`,
+  metadata: {
+    source,           // connection alias (e.g., "discord-bot")
+    eventType,        // e.g., "MESSAGE_CREATE", "push"
+    eventId,          // monotonic ID from proxy ring buffer
+    receivedAt,       // ISO-8601 from proxy
+    data,             // full event payload — stored for audit trail
+    agentAction,      // what the agent did in response (filled after session)
+  },
+});
+```
+
+**Dashboard Events page** already reads from the activity log with `type === "event"` filter. With event persistence, it shows the full history of events received from subscribed connections — not just live status.
 
 ### 3.5 — Verification
 
-- Start a Claude Code session from the agent dashboard chat
-- Agent's identity is injected (verify by checking that it follows personality settings)
-- Agent reads its own memory files during the session (per CLAUDE.md workspace protocol)
-- Agent can call mcp-secure-proxy tools (secure_request, poll_events) during sessions
-- Session appears in both the agent view and the main chat list
-- Activity log records session lifecycle events
-- Daily memory updated after session completes
+- Start an agent chat via the existing ChatList agent mode toggle — agent responds with full personality
+- Agent can call CCUI tools during its session:
+  - `mcp__ccui__list_agents` returns other agents
+  - `mcp__ccui__create_cron_job` creates a scheduled task (visible in dashboard)
+  - `mcp__ccui__start_agent_session` spins off another agent (returns chatId)
+  - `mcp__ccui__get_session_status` checks if the spawned session completed
+  - `mcp__ccui__read_session_messages` reads what the spawned agent said
+- Agent always runs in its workspace folder (memory, CLAUDE.md, etc. accessible)
+- Agent can also call mcp-secure-proxy tools (secure_request, poll_events) via the plugin
+- Chat appears in main chat list with agent badge (emoji + name)
+- Dashboard Chat page shows the agent's real conversation history
+- Activity log records session lifecycle + any events the agent logged via `log_activity`
+- No separate agent chat routes — everything goes through existing `/api/stream/*`
 
 ---
 
@@ -999,12 +1103,18 @@ Phase 2 ✅  Workspace & Memory
     │       - §2.7: ✅ CreateAgent form expansion (structured identity fields)
     │
     ▼
-Phase 3     Execution Engine
-    │       - Thin executor: compileIdentityPrompt() + folder + config → sendMessage()
-    │       - Ensures mcp-secure-proxy plugin is active for agent sessions
-    │       - Agent chat routes + SSE streaming
-    │       - Frontend chat wired to real sessions
-    │       - Session ownership (agent badge in main chat list)
+Phase 3     Custom Tools & Session Integration
+    │       - §3.1: agent-tools.ts — custom MCP server (createSdkMcpServer) with CCUI tools:
+    │               start_agent_session, get_session_status, read_session_messages,
+    │               list/create/update/delete_cron_job, get/log_activity, list_agents, get_agent_info
+    │       - §3.2: Inject custom tools into sendMessage() via agentAlias option
+    │               Async generator prompt format for MCP server compatibility
+    │       - §3.3: Session ownership — agentAlias in chat metadata, agent badge in ChatList
+    │               Dashboard Chat page → agent's real conversations (no mock)
+    │       - §3.4: Event persistence — all ingestor events stored in activity log
+    │       - No separate agent chat routes — uses existing /api/stream/*
+    │       - No separate session storage — tags standard chat metadata
+    │       - Always runs in agent workspace folder (no override)
     │       Depends on: Phase 2 (workspace, activity logging)
     │
     ▼
@@ -1020,7 +1130,7 @@ Phase 4     Event Watcher & Automation
     │       - NO trigger CRUD — just enable/disable event subscriptions
     │       - Ring buffer monitoring & resilience (backoff, cursor tracking)
     │       - NO custom event ingestion — mcp-secure-proxy handles all of that
-    │       Depends on: Phase 3 (executeAgent)
+    │       Depends on: Phase 3 (custom tools, sendMessage agent integration)
     │
     ▼
 Phase 5     Advanced Features
