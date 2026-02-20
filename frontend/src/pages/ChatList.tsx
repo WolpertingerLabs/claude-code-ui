@@ -7,6 +7,7 @@ import {
   toggleBookmark,
   getSessionStatus,
   listAgents,
+  getAgentIdentityPrompt,
   type Chat,
   type SessionStatus,
   type DefaultPermissions,
@@ -166,7 +167,7 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
     });
   };
 
-  const handleAgentCreate = () => {
+  const handleAgentCreate = async () => {
     if (!selectedAgent?.workspacePath) return;
 
     const agentPermissions: DefaultPermissions = {
@@ -176,10 +177,18 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
       webAccess: "allow",
     };
 
+    // Fetch compiled identity prompt for the agent
+    let systemPrompt: string | undefined;
+    try {
+      systemPrompt = await getAgentIdentityPrompt(selectedAgent.alias);
+    } catch {
+      // Continue without identity prompt if fetch fails
+    }
+
     setShowNew(false);
     setSelectedAgent(null);
     navigate(`/chat/new?folder=${encodeURIComponent(selectedAgent.workspacePath)}`, {
-      state: { defaultPermissions: agentPermissions },
+      state: { defaultPermissions: agentPermissions, systemPrompt },
     });
   };
 
