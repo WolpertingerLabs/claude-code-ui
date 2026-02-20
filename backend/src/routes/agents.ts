@@ -5,6 +5,7 @@ import { join } from "path";
 import { homedir } from "os";
 import type { AgentConfig } from "shared";
 import { createAgent, listAgents, getAgent, deleteAgent, agentExists, isValidAlias } from "../services/agent-file-service.js";
+import { compileIdentityPrompt, scaffoldWorkspace } from "../services/claude-compiler.js";
 
 export const agentsRouter = Router();
 
@@ -76,10 +77,25 @@ agentsRouter.post("/", (req: Request, res: Response): void => {
 
   createAgent(config);
 
-  // Ensure workspace directory exists
+  // Ensure workspace directory exists and scaffold initial files
   const workspacePath = ensureWorkspaceDir(config.alias);
+  scaffoldWorkspace(workspacePath);
 
   res.status(201).json({ agent: { ...config, workspacePath } });
+});
+
+// Identity prompt — returns compiled identity string for SDK systemPrompt.append
+agentsRouter.get("/:alias/identity-prompt", (req: Request, res: Response): void => {
+  const alias = req.params.alias as string;
+  const agent = getAgent(alias);
+
+  if (!agent) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
+  const prompt = compileIdentityPrompt(agent);
+  res.json({ prompt });
 });
 
 agentsRouter.get("/:alias", (req: Request, res: Response): void => {
@@ -92,6 +108,69 @@ agentsRouter.get("/:alias", (req: Request, res: Response): void => {
   }
 
   res.json({ agent: withWorkspacePath(agent) });
+});
+
+agentsRouter.put("/:alias", (req: Request, res: Response): void => {
+  const alias = req.params.alias as string;
+  const existing = getAgent(alias);
+
+  if (!existing) {
+    res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
+  const {
+    name,
+    description,
+    systemPrompt,
+    emoji,
+    personality,
+    role,
+    tone,
+    pronouns,
+    languages,
+    guidelines,
+    userName,
+    userTimezone,
+    userLocation,
+    userContext,
+  } = req.body as Partial<AgentConfig>;
+
+  // Build updated config — only override fields present in request body
+  const updated: AgentConfig = {
+    ...existing,
+    ...(name !== undefined && { name: name.trim() }),
+    ...(description !== undefined && { description: description.trim() }),
+    ...(systemPrompt !== undefined && { systemPrompt: systemPrompt?.trim() || undefined }),
+    ...(emoji !== undefined && { emoji: emoji || undefined }),
+    ...(personality !== undefined && { personality: personality?.trim() || undefined }),
+    ...(role !== undefined && { role: role?.trim() || undefined }),
+    ...(tone !== undefined && { tone: tone?.trim() || undefined }),
+    ...(pronouns !== undefined && { pronouns: pronouns?.trim() || undefined }),
+    ...(languages !== undefined && { languages }),
+    ...(guidelines !== undefined && { guidelines }),
+    ...(userName !== undefined && { userName: userName?.trim() || undefined }),
+    ...(userTimezone !== undefined && { userTimezone: userTimezone?.trim() || undefined }),
+    ...(userLocation !== undefined && { userLocation: userLocation?.trim() || undefined }),
+    ...(userContext !== undefined && { userContext: userContext?.trim() || undefined }),
+  };
+
+  // Validate required fields
+  if (!updated.name || updated.name.length === 0 || updated.name.length > 128) {
+    res.status(400).json({ error: "Name must be 1-128 characters" });
+    return;
+  }
+
+  if (!updated.description || updated.description.length === 0 || updated.description.length > 512) {
+    res.status(400).json({ error: "Description must be 1-512 characters" });
+    return;
+  }
+
+  // Persist (createAgent acts as upsert — mkdirSync with recursive is a no-op)
+  createAgent(updated);
+
+  const workspacePath = ensureWorkspaceDir(alias);
+  res.json({ agent: { ...updated, workspacePath } });
 });
 
 agentsRouter.delete("/:alias", (req: Request, res: Response): void => {

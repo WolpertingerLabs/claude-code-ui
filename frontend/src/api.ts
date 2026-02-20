@@ -365,10 +365,29 @@ export async function createAgent(agent: { name: string; alias: string; descript
   return data.agent;
 }
 
+export async function updateAgent(alias: string, updates: Partial<AgentConfig>): Promise<AgentConfig> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify(updates),
+  });
+  await assertOk(res, "Failed to update agent");
+  const data = await res.json();
+  return data.agent;
+}
+
 export async function deleteAgent(alias: string): Promise<void> {
   const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}`, {
     method: "DELETE",
     credentials: "include",
   });
   await assertOk(res, "Failed to delete agent");
+}
+
+export async function getAgentIdentityPrompt(alias: string): Promise<string> {
+  const res = await fetch(`${BASE}/agents/${encodeURIComponent(alias)}/identity-prompt`, { credentials: "include" });
+  await assertOk(res, "Failed to get agent identity prompt");
+  const data = await res.json();
+  return data.prompt;
 }

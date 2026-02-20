@@ -104,10 +104,7 @@ function resolveEnvReferences(env: Record<string, string>): Record<string, strin
  * Resolve ${CLAUDE_PLUGIN_ROOT} and relative paths in MCP server command/args.
  * Uses the server's mcpJsonDir or the parent plugin's path as the base directory.
  */
-function resolveServerPaths(
-  server: McpServerConfig,
-  pluginPath?: string,
-): { command?: string; args?: string[] } {
+function resolveServerPaths(server: McpServerConfig, pluginPath?: string): { command?: string; args?: string[] } {
   const baseDir = server.mcpJsonDir || pluginPath;
   if (!baseDir) return { command: server.command, args: server.args };
 
@@ -418,6 +415,8 @@ interface SendMessageOptions {
   defaultPermissions?: DefaultPermissions;
   /** Maximum number of agent turns before stopping (default: 200) */
   maxTurns?: number;
+  /** Agent identity prompt — appended to Claude Code's preset system prompt */
+  systemPrompt?: string;
 }
 
 /**
@@ -497,6 +496,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       ...(plugins.length > 0 ? { plugins } : {}),
       ...(mcpOpts ? { mcpServers: mcpOpts.mcpServers, allowedTools: mcpOpts.allowedTools } : {}),
+      ...(opts.systemPrompt ? { systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPrompt } } : {}),
       env: {
         ...process.env,
         // Propagate resolved MCP server env vars to the CLI subprocess so that plugins
