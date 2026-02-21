@@ -44,11 +44,6 @@ export interface AgentConfig {
   // Heartbeat — periodic open-ended check-ins
   heartbeat?: HeartbeatConfig;
 
-  // Auto-journal — automatically update memory files after each conversation turn.
-  // When enabled (default), the agent is prompted to update its daily journal and
-  // any other workspace files (MEMORY.md, SOUL.md, USER.md, etc.) at the end of each turn.
-  autoJournal?: boolean; // default: true
-
   // Memory consolidation — daily distillation of journal entries into MEMORY.md.
   // Runs once daily per agent at a configurable time, reviewing recent journals
   // and updating long-term memory files.
