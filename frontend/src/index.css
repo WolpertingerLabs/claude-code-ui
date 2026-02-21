@@ -416,3 +416,9 @@ pre {
     background: rgba(124, 106, 239, 0.06);
   }
 }
+
+/* Fix native <option> elements being unreadable in dark mode */
+select option {
+  background: var(--bg);
+  color: var(--text);
+}

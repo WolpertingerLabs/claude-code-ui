@@ -1,15 +1,9 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useOutletContext } from "react-router-dom";
-import { Plus, Zap, Play, Pause, Trash2, X, Search, ChevronDown, ChevronRight } from "lucide-react";
+import { Plus, Zap, Play, Pause, Trash2, X, Search, ChevronDown, ChevronRight, Info, Pencil } from "lucide-react";
+import ModalOverlay from "../../../components/ModalOverlay";
 import { useIsMobile } from "../../../hooks/useIsMobile";
-import {
-  getAgentTriggers,
-  createAgentTrigger,
-  updateAgentTrigger,
-  deleteAgentTrigger,
-  backtestTriggerFilter,
-  getProxyEvents,
-} from "../../../api";
+import { getAgentTriggers, createAgentTrigger, updateAgentTrigger, deleteAgentTrigger, backtestTriggerFilter, getProxyEvents } from "../../../api";
 import type { Trigger, FilterCondition, TriggerFilter, AgentConfig, BacktestResult, StoredEvent } from "../../../api";
 
 function timeAgo(ts: number): string {
@@ -48,6 +42,13 @@ export default function Triggers() {
   const [backtestResults, setBacktestResults] = useState<BacktestResult | null>(null);
   const [backtesting, setBacktesting] = useState(false);
   const [expandedBacktestEvent, setExpandedBacktestEvent] = useState<number | null>(null);
+
+  // Template info modal
+  const [showTemplateInfo, setShowTemplateInfo] = useState(false);
+
+  // Editing state
+  const [editingTriggerId, setEditingTriggerId] = useState<string | null>(null);
+  const formRef = useRef<HTMLFormElement>(null);
 
   // Available sources for dropdown
   const [availableSources, setAvailableSources] = useState<string[]>([]);
@@ -126,6 +127,7 @@ export default function Triggers() {
     setFormConditions([]);
     setFormPrompt("");
     setBacktestResults(null);
+    setEditingTriggerId(null);
   };
 
   const handleBacktest = async () => {
@@ -141,6 +143,44 @@ export default function Triggers() {
     }
   };
 
+  const handleUpdate = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formName.trim() || !editingTriggerId) return;
+
+    setFormSaving(true);
+    try {
+      const updated = await updateAgentTrigger(agent.alias, editingTriggerId, {
+        name: formName.trim(),
+        description: formDescription.trim(),
+        filter: buildFilter(),
+        action: { type: "start_session", prompt: formPrompt.trim() || undefined },
+      });
+      setTriggers((prev) => prev.map((t) => (t.id === editingTriggerId ? updated : t)));
+      setShowForm(false);
+      resetForm();
+    } catch {
+      // ignore
+    } finally {
+      setFormSaving(false);
+    }
+  };
+
+  const startEditing = (trigger: Trigger) => {
+    setEditingTriggerId(trigger.id);
+    setFormName(trigger.name);
+    setFormDescription(trigger.description);
+    setFormSource(trigger.filter.source || "");
+    setFormEventType(trigger.filter.eventType || "");
+    setFormConditions(trigger.filter.conditions ? trigger.filter.conditions.map((c) => ({ ...c })) : []);
+    setFormPrompt(trigger.action.prompt || "");
+    setBacktestResults(null);
+    setShowForm(true);
+
+    setTimeout(() => {
+      formRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 50);
+  };
+
   // Condition builder helpers
   const addCondition = () => {
     setFormConditions((prev) => [...prev, { field: "", operator: "equals", value: "" }]);
@@ -151,9 +191,7 @@ export default function Triggers() {
   };
 
   const updateCondition = (index: number, updates: Partial<FilterCondition>) => {
-    setFormConditions((prev) =>
-      prev.map((c, i) => (i === index ? { ...c, ...updates } : c)),
-    );
+    setFormConditions((prev) => prev.map((c, i) => (i === index ? { ...c, ...updates } : c)));
   };
 
   const filterSummary = (filter: TriggerFilter): string => {
@@ -186,9 +224,7 @@ export default function Triggers() {
       >
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700 }}>Triggers</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-            Event-driven automations that fire when matching events arrive
-          </p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>Event-driven automations that fire when matching events arrive</p>
         </div>
         <button
           onClick={() => {
@@ -219,7 +255,8 @@ export default function Triggers() {
       {/* Create form */}
       {showForm && (
         <form
-          onSubmit={handleCreate}
+          ref={formRef}
+          onSubmit={editingTriggerId ? handleUpdate : handleCreate}
           style={{
             background: "var(--surface)",
             border: "1px solid var(--border)",
@@ -231,13 +268,26 @@ export default function Triggers() {
             gap: 14,
           }}
         >
-          <input
-            type="text"
-            value={formName}
-            onChange={(e) => setFormName(e.target.value)}
-            placeholder="Trigger name"
-            style={inputStyle}
-          />
+          {editingTriggerId && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 12px",
+                background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+                border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                borderRadius: 8,
+                fontSize: 13,
+                color: "var(--accent)",
+                fontWeight: 500,
+              }}
+            >
+              <Pencil size={14} />
+              Editing trigger
+            </div>
+          )}
+          <input type="text" value={formName} onChange={(e) => setFormName(e.target.value)} placeholder="Trigger name" style={inputStyle} />
           <input
             type="text"
             value={formDescription}
@@ -248,7 +298,17 @@ export default function Triggers() {
 
           {/* Filter section */}
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10, display: "block" }}>
+            <label
+              style={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: "var(--text-muted)",
+                textTransform: "uppercase",
+                letterSpacing: "0.05em",
+                marginBottom: 10,
+                display: "block",
+              }}
+            >
               Event Filter
             </label>
 
@@ -256,14 +316,12 @@ export default function Triggers() {
               {/* Source dropdown */}
               <div style={{ flex: 1, minWidth: 180 }}>
                 <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Source</label>
-                <select
-                  value={formSource}
-                  onChange={(e) => setFormSource(e.target.value)}
-                  style={{ ...inputStyle, cursor: "pointer" }}
-                >
+                <select value={formSource} onChange={(e) => setFormSource(e.target.value)} style={{ ...inputStyle, cursor: "pointer" }}>
                   <option value="">Any source</option>
                   {availableSources.map((s) => (
-                    <option key={s} value={s}>{s}</option>
+                    <option key={s} value={s}>
+                      {s}
+                    </option>
                   ))}
                 </select>
               </div>
@@ -364,13 +422,35 @@ export default function Triggers() {
 
           {/* Prompt template */}
           <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
-            <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 6, display: "block" }}>
-              Prompt Template
-            </label>
+            <div style={{ display: "flex", alignItems: "center", gap: 6, marginBottom: 6 }}>
+              <label style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                Prompt Template
+              </label>
+              <button
+                type="button"
+                onClick={() => setShowTemplateInfo(true)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: 2,
+                  background: "transparent",
+                  border: "none",
+                  color: "var(--text-muted)",
+                  cursor: "pointer",
+                  borderRadius: 4,
+                }}
+                title="Template variable reference"
+              >
+                <Info size={14} />
+              </button>
+            </div>
             <textarea
               value={formPrompt}
               onChange={(e) => setFormPrompt(e.target.value)}
-              placeholder={"Use {{event.source}}, {{event.eventType}}, {{event.data}}, {{event.data.field.path}} to inject event data.\n\nLeave empty for a default prompt with the full event payload."}
+              placeholder={
+                "Use {{event.source}}, {{event.eventType}}, {{event.data}}, {{event.data.field.path}} to inject event data.\n\nLeave empty for a default prompt with the full event payload."
+              }
               rows={4}
               style={{ ...inputStyle, resize: "vertical", minHeight: 80, fontFamily: "var(--font-mono)", fontSize: 13 }}
             />
@@ -420,7 +500,7 @@ export default function Triggers() {
                 cursor: !formName.trim() || formSaving ? "not-allowed" : "pointer",
               }}
             >
-              {formSaving ? "Creating..." : "Create Trigger"}
+              {formSaving ? (editingTriggerId ? "Saving..." : "Creating...") : editingTriggerId ? "Save Changes" : "Create Trigger"}
             </button>
           </div>
 
@@ -439,9 +519,7 @@ export default function Triggers() {
                 <span style={{ fontSize: 13, fontWeight: 600 }}>
                   {backtestResults.matchCount} match{backtestResults.matchCount !== 1 ? "es" : ""}
                 </span>
-                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                  out of {backtestResults.totalScanned} events scanned
-                </span>
+                <span style={{ fontSize: 12, color: "var(--text-muted)" }}>out of {backtestResults.totalScanned} events scanned</span>
               </div>
 
               {backtestResults.matches.length > 0 && (
@@ -495,9 +573,7 @@ export default function Triggers() {
                         >
                           {event.source}
                         </span>
-                        <span style={{ fontWeight: 500, fontFamily: "monospace", flexShrink: 0 }}>
-                          {event.eventType}
-                        </span>
+                        <span style={{ fontWeight: 500, fontFamily: "monospace", flexShrink: 0 }}>{event.eventType}</span>
                         <span
                           style={{
                             color: "var(--text-muted)",
@@ -510,9 +586,7 @@ export default function Triggers() {
                         >
                           {JSON.stringify(event.data).slice(0, 80)}
                         </span>
-                        <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 11 }}>
-                          {timeAgo(event.storedAt)}
-                        </span>
+                        <span style={{ color: "var(--text-muted)", flexShrink: 0, fontSize: 11 }}>{timeAgo(event.storedAt)}</span>
                       </div>
 
                       {expandedBacktestEvent === event.id && (
@@ -546,16 +620,12 @@ export default function Triggers() {
 
       {/* Trigger list */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
-          Loading triggers...
-        </div>
+        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>Loading triggers...</div>
       ) : triggers.length === 0 ? (
         <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
           <Zap size={24} style={{ marginBottom: 8, opacity: 0.4 }} />
           <p>No triggers yet</p>
-          <p style={{ fontSize: 12, marginTop: 4 }}>
-            Create a trigger to automatically run agent sessions when events match your filters.
-          </p>
+          <p style={{ fontSize: 12, marginTop: 4 }}>Create a trigger to automatically run agent sessions when events match your filters.</p>
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -615,17 +685,11 @@ export default function Triggers() {
                   }}
                 >
                   <Zap size={13} />
-                  <span style={{ fontFamily: "monospace", fontSize: 12 }}>
-                    {filterSummary(trigger.filter)}
-                  </span>
+                  <span style={{ fontFamily: "monospace", fontSize: 12 }}>{filterSummary(trigger.filter)}</span>
                 </div>
 
                 {/* Description */}
-                {trigger.description && (
-                  <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 10 }}>
-                    {trigger.description}
-                  </p>
-                )}
+                {trigger.description && <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 10 }}>{trigger.description}</p>}
 
                 {/* Footer */}
                 <div
@@ -640,10 +704,34 @@ export default function Triggers() {
                   }}
                 >
                   <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
-                    <span>Fired: {trigger.triggerCount} time{trigger.triggerCount !== 1 ? "s" : ""}</span>
+                    <span>
+                      Fired: {trigger.triggerCount} time{trigger.triggerCount !== 1 ? "s" : ""}
+                    </span>
                     {trigger.lastTriggered && <span>Last: {timeAgo(trigger.lastTriggered)}</span>}
                   </div>
                   <div style={{ display: "flex", gap: 8 }}>
+                    <button
+                      onClick={() => startEditing(trigger)}
+                      style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: 6,
+                        padding: "6px 12px",
+                        borderRadius: 6,
+                        fontSize: 12,
+                        fontWeight: 500,
+                        background: "transparent",
+                        color: "var(--accent)",
+                        border: "1px solid color-mix(in srgb, var(--accent) 30%, transparent)",
+                        transition: "background 0.15s",
+                        cursor: "pointer",
+                      }}
+                      onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--accent) 10%, transparent)")}
+                      onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+                    >
+                      <Pencil size={12} />
+                      Edit
+                    </button>
                     <button
                       onClick={() => toggleTrigger(trigger.id, trigger.status)}
                       style={{
@@ -692,6 +780,106 @@ export default function Triggers() {
             );
           })}
         </div>
+      )}
+
+      {/* Template variable info modal */}
+      {showTemplateInfo && (
+        <ModalOverlay style={{ padding: "20px" }}>
+          <div
+            style={{
+              backgroundColor: "var(--bg)",
+              borderRadius: 12,
+              width: "100%",
+              maxWidth: 520,
+              maxHeight: "80vh",
+              overflow: "hidden",
+              boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)",
+              border: "1px solid var(--border)",
+            }}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: "20px 24px 16px",
+                borderBottom: "1px solid var(--border)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+              }}
+            >
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Info size={20} color="var(--accent)" />
+                <h2 style={{ margin: 0, fontSize: 18, fontWeight: 600, color: "var(--text)" }}>Template Variables</h2>
+              </div>
+              <button
+                onClick={() => setShowTemplateInfo(false)}
+                style={{
+                  background: "none",
+                  border: "none",
+                  cursor: "pointer",
+                  padding: 4,
+                  borderRadius: 4,
+                  color: "var(--text-muted)",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Content */}
+            <div style={{ padding: "20px 24px 24px", overflowY: "auto", maxHeight: "calc(80vh - 120px)" }}>
+              <p style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 16, lineHeight: 1.5 }}>
+                Use these placeholders in your prompt template to inject event data when the trigger fires.
+              </p>
+
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                {[
+                  { placeholder: "{{event.source}}", desc: "Connection alias", example: "discord-bot" },
+                  { placeholder: "{{event.eventType}}", desc: "Event type string", example: "MESSAGE_CREATE" },
+                  { placeholder: "{{event.id}}", desc: "Event ID number", example: "42" },
+                  { placeholder: "{{event.receivedAt}}", desc: "ISO-8601 timestamp", example: "2026-02-21T12:00:00.000Z" },
+                  { placeholder: "{{event.data}}", desc: "Full JSON payload (formatted)", example: '{"content": "hello", ...}' },
+                  { placeholder: "{{event.data.field.path}}", desc: "Dot-notation into data object", example: "{{event.data.author.username}}" },
+                ].map((item) => (
+                  <div
+                    key={item.placeholder}
+                    style={{
+                      padding: "10px 12px",
+                      background: "var(--surface)",
+                      border: "1px solid var(--border)",
+                      borderRadius: 8,
+                    }}
+                  >
+                    <code style={{ fontSize: 13, fontWeight: 600, fontFamily: "var(--font-mono)", color: "var(--accent)" }}>{item.placeholder}</code>
+                    <p style={{ fontSize: 12, color: "var(--text-muted)", marginTop: 4, lineHeight: 1.4 }}>
+                      {item.desc}
+                      <span style={{ opacity: 0.7 }}> — e.g. {item.example}</span>
+                    </p>
+                  </div>
+                ))}
+              </div>
+
+              <div
+                style={{
+                  marginTop: 16,
+                  padding: "10px 12px",
+                  background: "color-mix(in srgb, var(--accent) 8%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--accent) 20%, transparent)",
+                  borderRadius: 8,
+                  fontSize: 12,
+                  color: "var(--text-muted)",
+                  lineHeight: 1.5,
+                }}
+              >
+                <strong style={{ color: "var(--text)" }}>Default behavior:</strong> When the prompt template is left empty, the trigger generates a default
+                prompt containing the full event payload as JSON.
+              </div>
+            </div>
+          </div>
+        </ModalOverlay>
       )}
     </div>
   );
