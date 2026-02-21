@@ -13,6 +13,7 @@ import { getPluginsForDirectory, type Plugin } from "./plugins.js";
 import { getEnabledAppPlugins, getEnabledMcpServers } from "./app-plugins.js";
 import { buildAgentToolsServer, setMessageSender } from "./agent-tools.js";
 import { appendActivity } from "./agent-activity.js";
+import { getAgent } from "./agent-file-service.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("claude");
@@ -495,7 +496,26 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
   const mcpServers: Record<string, any> = mcpOpts ? { ...mcpOpts.mcpServers } : {};
   const allowedTools: string[] = mcpOpts ? [...mcpOpts.allowedTools] : [];
 
+  // Resolve the agent's MCP key alias for proxy identity.
+  // When an agent has mcpKeyAlias set, inject MCP_KEY_ALIAS into each MCP server's
+  // env and into the subprocess env so the mcp-secure-proxy plugin uses the correct
+  // local key identity (keys/local/<alias>/).
+  let agentMcpKeyAlias: string | undefined;
   if (opts.agentAlias) {
+    const agentConfig = getAgent(opts.agentAlias);
+    agentMcpKeyAlias = agentConfig?.mcpKeyAlias;
+
+    if (agentMcpKeyAlias) {
+      // Override MCP_KEY_ALIAS in each MCP server's env that declares it
+      for (const serverName of Object.keys(mcpServers)) {
+        const server = mcpServers[serverName];
+        if (server.env && "MCP_KEY_ALIAS" in server.env) {
+          server.env = { ...server.env, MCP_KEY_ALIAS: agentMcpKeyAlias };
+        }
+      }
+      log.debug(`Set MCP_KEY_ALIAS="${agentMcpKeyAlias}" for agent=${opts.agentAlias}`);
+    }
+
     const ccuiServer = buildAgentToolsServer(opts.agentAlias);
     mcpServers["ccui"] = ccuiServer;
     allowedTools.push("mcp__ccui__*");
@@ -532,6 +552,9 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
         // Propagate resolved MCP server env vars to the CLI subprocess so that plugins
         // loaded by the CLI can resolve ${VAR} templates in their .mcp.json files.
         ...(mcpOpts?.resolvedEnvVars ?? {}),
+        // Propagate agent's MCP key alias so CLI-level re-resolution of ${MCP_KEY_ALIAS}
+        // in .mcp.json templates also picks up the correct identity.
+        ...(agentMcpKeyAlias && { MCP_KEY_ALIAS: agentMcpKeyAlias }),
         // Remove CLAUDECODE to prevent "cannot be launched inside another Claude Code session" errors
         // when the backend was started from within a Claude Code session (e.g. via PM2 redeploy)
         CLAUDECODE: undefined,
