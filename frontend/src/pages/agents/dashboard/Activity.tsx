@@ -11,6 +11,7 @@ const typeColors: Record<string, string> = {
   connection: "#58a6ff",
   system: "var(--text-muted)",
   trigger: "#a78bfa",
+  consolidation: "#f59e0b",
 };
 
 const typeLabels: Record<string, string> = {
@@ -20,9 +21,10 @@ const typeLabels: Record<string, string> = {
   connection: "Connection",
   system: "System",
   trigger: "Trigger",
+  consolidation: "Consolidation",
 };
 
-const filterOptions = ["all", "chat", "event", "cron", "connection", "system", "trigger"] as const;
+const filterOptions = ["all", "chat", "event", "cron", "connection", "system", "trigger", "consolidation"] as const;
 
 function formatTimestamp(ts: number): string {
   const d = new Date(ts);
@@ -36,8 +38,7 @@ function formatTimestamp(ts: number): string {
   const diffHours = Math.floor(diffMins / 60);
   if (diffHours < 24) return `${diffHours}h ago`;
 
-  const isYesterday =
-    new Date(now.getTime() - 86400000).toDateString() === d.toDateString();
+  const isYesterday = new Date(now.getTime() - 86400000).toDateString() === d.toDateString();
   const time = d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   if (isYesterday) return `Yesterday at ${time}`;
 
@@ -55,9 +56,21 @@ export default function Activity() {
     let cancelled = false;
     const type = filter === "all" ? undefined : filter;
     getAgentActivity(agent.alias, type, 100)
-      .then((data) => { if (!cancelled) { setEntries(data); setLoading(false); } })
-      .catch(() => { if (!cancelled) { setEntries([]); setLoading(false); } });
-    return () => { cancelled = true; };
+      .then((data) => {
+        if (!cancelled) {
+          setEntries(data);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setEntries([]);
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [agent.alias, filter]);
 
   return (
@@ -65,9 +78,7 @@ export default function Activity() {
       {/* Header */}
       <div style={{ marginBottom: 16 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>Activity</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-          Timeline of agent actions and events
-        </p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>Timeline of agent actions and events</p>
       </div>
 
       {/* Filter pills */}
@@ -91,13 +102,9 @@ export default function Activity() {
                 borderRadius: 20,
                 fontSize: 13,
                 fontWeight: isActive ? 600 : 400,
-                background: isActive
-                  ? `color-mix(in srgb, ${color} 15%, transparent)`
-                  : "transparent",
+                background: isActive ? `color-mix(in srgb, ${color} 15%, transparent)` : "transparent",
                 color: isActive ? color : "var(--text-muted)",
-                border: isActive
-                  ? `1px solid color-mix(in srgb, ${color} 30%, transparent)`
-                  : "1px solid var(--border)",
+                border: isActive ? `1px solid color-mix(in srgb, ${color} 30%, transparent)` : "1px solid var(--border)",
                 transition: "all 0.15s",
               }}
             >
@@ -109,9 +116,7 @@ export default function Activity() {
 
       {/* Timeline */}
       {loading ? (
-        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
-          Loading activity...
-        </div>
+        <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>Loading activity...</div>
       ) : entries.length === 0 ? (
         <div
           style={{
@@ -188,9 +193,7 @@ export default function Activity() {
                       >
                         {typeLabels[entry.type]}
                       </span>
-                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                        {formatTimestamp(entry.timestamp)}
-                      </span>
+                      <span style={{ fontSize: 12, color: "var(--text-muted)" }}>{formatTimestamp(entry.timestamp)}</span>
                     </div>
                     <p style={{ fontSize: 14, lineHeight: 1.5 }}>{entry.message}</p>
                   </div>

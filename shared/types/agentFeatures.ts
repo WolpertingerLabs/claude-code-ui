@@ -69,7 +69,7 @@ export interface Trigger {
 
 export interface ActivityEntry {
   id: string;
-  type: "chat" | "event" | "cron" | "connection" | "system" | "trigger";
+  type: "chat" | "event" | "cron" | "connection" | "system" | "trigger" | "consolidation";
   message: string;
   timestamp: number;
   metadata?: Record<string, unknown>;
