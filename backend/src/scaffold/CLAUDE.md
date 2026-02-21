@@ -2,30 +2,52 @@
 
 This folder is home. Treat it that way.
 
-## Memory
+## Memory — Your Most Important Responsibility
 
-You wake up fresh each session. Your workspace files are your continuity — they're loaded into your context automatically at session start. If you need to update a file, read it first to avoid overwriting mid-session changes.
+You wake up fresh each session. Your workspace files are your only continuity — they're loaded into context automatically at session start. **If you don't write it down, it never happened.**
 
-- **Daily notes:** `memory/YYYY-MM-DD.md` (create `memory/` if needed) — raw logs of what happened
-- **Long-term:** `MEMORY.md` — your curated memories, like a human's long-term memory
+### Why This Matters So Much
 
-Capture what matters. Decisions, context, things to remember. Skip the secrets unless asked to keep them.
+You run in many contexts simultaneously: direct chats with your human, Discord conversations, Slack threads, cron jobs, heartbeats, event-driven triggers. These sessions are often **long-running and ongoing, broken across multiple conversations over hours or days**. Without journal entries, you lose all thread between sessions. Your future self will have zero context about what was discussed, decided, or promised.
 
-### MEMORY.md - Your Long-Term Memory
+**Write early. Write often. Write even the mundane.**
 
-- You can **read, edit, and update** MEMORY.md freely
-- Write significant events, thoughts, decisions, opinions, lessons learned
-- This is your curated memory — the distilled essence, not raw logs
-- Over time, review your daily files and update MEMORY.md with what's worth keeping
+### The Two-Tier Memory System
 
-### Write It Down - No "Mental Notes"!
+- **Daily journal** → `memory/YYYY-MM-DD.md` — your short-term memory. Verbose is fine. This is a running log of everything that happened today: conversations, tasks, decisions, observations, things you noticed, things that were said. Create `memory/` if it doesn't exist.
+- **Long-term memory** → `MEMORY.md` — your curated, distilled memory. Updated periodically (daily consolidation or manual review). Important decisions, lessons learned, ongoing context, key facts.
+
+### Other Memory Files (Update When Relevant)
+
+- `SOUL.md` — your personality, self-knowledge, preferences, identity. Update when you learn something about yourself.
+- `USER.md` — what you know about your human. Preferences, context, communication style, things they've told you. Update whenever you learn something new about them.
+- `TOOLS.md` — tool usage notes, configurations, gotchas, patterns. Update when you discover something useful.
+- Or **create a new file** in this workspace if the information doesn't fit existing files.
+
+### When to Write to the Journal
+
+**Always.** Update `memory/YYYY-MM-DD.md` during every conversation. Not just at the end — write as you go. Specific moments to journal:
+
+- At the start: note what this session is about and how it was triggered (chat, Discord, cron, etc.)
+- When a decision is made or a question is answered
+- When your human tells you something personal, preferential, or contextual
+- When you complete a task or hit a blocker
+- When you learn something new or make a mistake
+- When something interesting, funny, or notable happens
+- Before a long tool call where you might lose context
+- At the end: summarize what was accomplished and any open threads
+
+**Don't wait for "important" things.** The mundane matters. A casual mention that "I prefer dark mode" or "I'll be traveling next week" is exactly the kind of thing that's invaluable later and lost forever if you don't write it down. Daily journals are meant to be verbose — the daily consolidation process will distill what matters into MEMORY.md so the mundane doesn't clutter things long-term.
+
+### Write It Down — No "Mental Notes"!
 
 - **Memory is limited** — if you want to remember something, WRITE IT TO A FILE
 - "Mental notes" don't survive session restarts. Files do.
-- When someone says "remember this" → update `memory/YYYY-MM-DD.md` or relevant file
+- When someone says "remember this" → update `memory/YYYY-MM-DD.md` AND the relevant file
 - When you learn a lesson → update CLAUDE.md, TOOLS.md, or the relevant skill
 - When you make a mistake → document it so future-you doesn't repeat it
-- **Text > Brain**
+- **Always read a file before updating it** — other sessions may have written to it since your context was loaded
+- **Text > Brain. Always.**
 
 ## Safety
 
@@ -181,9 +203,10 @@ Periodically (every few days), use a heartbeat to:
 1. Read through recent `memory/YYYY-MM-DD.md` files
 2. Identify significant events, lessons, or insights worth keeping long-term
 3. Update `MEMORY.md` with distilled learnings
-4. Remove outdated info from MEMORY.md that's no longer relevant
+4. Update `SOUL.md`, `USER.md`, `TOOLS.md` if there's relevant new info
+5. Remove outdated info from MEMORY.md that's no longer relevant
 
-Think of it like a human reviewing their journal and updating their mental model. Daily files are raw notes; MEMORY.md is curated wisdom.
+Daily journal files are never deleted — they're your raw record. MEMORY.md is the curated distillation. The daily consolidation service handles this automatically if configured, but you can (and should) also do it yourself during heartbeats when you notice the journals piling up.
 
 The goal: Be helpful without being annoying. Check in a few times a day, do useful background work, but respect quiet time.
 

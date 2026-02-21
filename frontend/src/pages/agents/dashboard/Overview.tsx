@@ -44,7 +44,6 @@ export default function Overview() {
   const [heartbeatInterval, setHeartbeatInterval] = useState(agent.heartbeat?.intervalMinutes || 30);
   const [quietStart, setQuietStart] = useState(agent.heartbeat?.quietHoursStart || "");
   const [quietEnd, setQuietEnd] = useState(agent.heartbeat?.quietHoursEnd || "");
-  const [autoJournal, setAutoJournal] = useState(agent.autoJournal !== false); // default: true
   const [consolidationEnabled, setConsolidationEnabled] = useState(agent.memoryConsolidation?.enabled || false);
   const [consolidationTime, setConsolidationTime] = useState(agent.memoryConsolidation?.timeOfDay || "03:00");
   const [consolidationRetention, setConsolidationRetention] = useState(agent.memoryConsolidation?.retentionDays || 14);
@@ -114,7 +113,6 @@ export default function Overview() {
           quietHoursStart: quietStart || undefined,
           quietHoursEnd: quietEnd || undefined,
         },
-        autoJournal,
         memoryConsolidation: {
           enabled: consolidationEnabled,
           timeOfDay: consolidationTime,
@@ -458,37 +456,6 @@ export default function Overview() {
               disabled={!heartbeatEnabled}
               style={{ ...inputStyle, opacity: heartbeatEnabled ? 1 : 0.5 }}
             />
-          </div>
-
-          {/* Auto-Journal section */}
-          <div style={{ gridColumn: isMobile ? undefined : "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
-              Auto-Journal
-            </p>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
-              Automatically update memory files after each conversation. The agent will append to its daily journal and update MEMORY.md, SOUL.md, USER.md, or
-              other files as needed.
-            </p>
-          </div>
-          <div>
-            <label style={labelStyle}>Enabled</label>
-            <button
-              type="button"
-              onClick={() => setAutoJournal(!autoJournal)}
-              style={{
-                padding: "8px 18px",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                background: autoJournal ? "var(--success)" : "var(--bg)",
-                color: autoJournal ? "#fff" : "var(--text-muted)",
-                border: autoJournal ? "1px solid var(--success)" : "1px solid var(--border)",
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
-              {autoJournal ? "On" : "Off"}
-            </button>
           </div>
 
           {/* Memory Consolidation section */}

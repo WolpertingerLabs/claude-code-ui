@@ -152,7 +152,6 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     userContext,
     eventSubscriptions,
     heartbeat,
-    autoJournal,
     memoryConsolidation,
     mcpKeyAlias,
   } = req.body as Partial<AgentConfig>;
@@ -176,7 +175,6 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     ...(userContext !== undefined && { userContext: userContext?.trim() || undefined }),
     ...(eventSubscriptions !== undefined && { eventSubscriptions }),
     ...(heartbeat !== undefined && { heartbeat }),
-    ...(autoJournal !== undefined && { autoJournal }),
     ...(memoryConsolidation !== undefined && { memoryConsolidation }),
     ...(mcpKeyAlias !== undefined && { mcpKeyAlias }),
   };
