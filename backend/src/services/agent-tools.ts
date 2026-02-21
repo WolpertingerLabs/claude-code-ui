@@ -15,17 +15,19 @@
 import { tool, createSdkMcpServer } from "@anthropic-ai/claude-agent-sdk";
 import { z } from "zod";
 import { readFileSync } from "fs";
-import { listAgents, getAgent, getAgentWorkspacePath } from "./agent-file-service.js";
-import { compileIdentityPrompt } from "./claude-compiler.js";
+import { listAgents, getAgent, getAgentWorkspacePath, createAgent, agentExists, isValidAlias, ensureAgentWorkspaceDir } from "./agent-file-service.js";
+import { compileIdentityPrompt, scaffoldWorkspace } from "./claude-compiler.js";
 import { listCronJobs, createCronJob, updateCronJob, deleteCronJob } from "./agent-cron-jobs.js";
 import { listTriggers, getTrigger, createTrigger, updateTrigger, deleteTrigger } from "./agent-triggers.js";
 import { getActivity, appendActivity } from "./agent-activity.js";
 import { getActiveSession } from "./claude.js";
+import { updateHeartbeatConfig } from "./heartbeat.js";
+import { updateConsolidationConfig } from "./memory-consolidation.js";
 import { findSessionLogPath } from "../utils/session-log.js";
 import { findChat } from "../utils/chat-lookup.js";
 import { createLogger } from "../utils/logger.js";
 
-import type { CronJob, Trigger } from "shared";
+import type { CronJob, Trigger, AgentConfig } from "shared";
 
 const log = createLogger("agent-tools");
 
@@ -582,6 +584,188 @@ export function buildAgentToolsServer(agentAlias: string) {
             return { content: [{ type: "text" as const, text: JSON.stringify(info, null, 2) }] };
           } catch (err: any) {
             return { content: [{ type: "text" as const, text: `Error getting agent info: ${err.message}` }] };
+          }
+        },
+      ),
+
+      // ── Agent Management ──────────────────────────────────
+
+      tool(
+        "create_agent",
+        "Create a new agent on the platform. The agent will have its own workspace, identity, and can be targeted by start_agent_session. Returns the created agent config.",
+        {
+          name: z.string().min(1).max(128).describe("Display name for the agent (1-128 characters)"),
+          alias: z
+            .string()
+            .min(2)
+            .max(64)
+            .describe("Unique alias/identifier (2-64 chars: lowercase letters, numbers, hyphens, underscores, must start with letter or number)"),
+          description: z.string().min(1).max(512).describe("What this agent does (1-512 characters)"),
+          systemPrompt: z.string().optional().describe("Custom system prompt for the agent"),
+          emoji: z.string().optional().describe("Emoji icon for the agent (e.g. '\uD83E\uDD16')"),
+          personality: z.string().optional().describe("Personality description"),
+          role: z.string().optional().describe("Role description (e.g. 'Research Assistant')"),
+          tone: z.string().optional().describe("Communication tone (e.g. 'friendly and concise')"),
+        },
+        async (args) => {
+          try {
+            // Validate alias format
+            if (!isValidAlias(args.alias)) {
+              return {
+                content: [
+                  {
+                    type: "text" as const,
+                    text: "Error: Alias must be 2-64 characters: lowercase letters, numbers, hyphens, underscores. Must start with a letter or number.",
+                  },
+                ],
+              };
+            }
+
+            // Check uniqueness
+            if (agentExists(args.alias)) {
+              return {
+                content: [{ type: "text" as const, text: `Error: An agent with alias "${args.alias}" already exists` }],
+              };
+            }
+
+            // Build config
+            const config: AgentConfig = {
+              name: args.name.trim(),
+              alias: args.alias.trim(),
+              description: args.description.trim(),
+              createdAt: Date.now(),
+              ...(args.systemPrompt !== undefined && { systemPrompt: args.systemPrompt.trim() || undefined }),
+              ...(args.emoji && { emoji: args.emoji }),
+              ...(args.personality && { personality: args.personality.trim() }),
+              ...(args.role && { role: args.role.trim() }),
+              ...(args.tone && { tone: args.tone.trim() }),
+            };
+
+            // Persist agent config
+            createAgent(config);
+
+            // Ensure workspace directory exists and scaffold initial files
+            const workspacePath = ensureAgentWorkspaceDir(config.alias);
+            scaffoldWorkspace(workspacePath);
+
+            log.info(`Agent ${agentAlias} created new agent: ${config.alias}`);
+            appendActivity(agentAlias, {
+              type: "system",
+              message: `Created new agent: ${config.name} (${config.alias})`,
+              metadata: { createdAlias: config.alias },
+            });
+
+            return { content: [{ type: "text" as const, text: JSON.stringify({ ...config, workspacePath }, null, 2) }] };
+          } catch (err: any) {
+            log.error(`create_agent failed: ${err.message}`);
+            return { content: [{ type: "text" as const, text: `Error creating agent: ${err.message}` }] };
+          }
+        },
+      ),
+
+      tool(
+        "update_agent",
+        "Update an existing agent's configuration. Only the fields you provide will be changed — all other fields remain unchanged. You can update any agent, including yourself. Returns the full updated config.",
+        {
+          alias: z.string().describe("The alias of the agent to update"),
+          name: z.string().min(1).max(128).optional().describe("New display name (1-128 characters)"),
+          description: z.string().min(1).max(512).optional().describe("New description (1-512 characters)"),
+          systemPrompt: z.string().optional().describe("New system prompt (pass empty string to clear)"),
+          emoji: z.string().optional().describe("New emoji icon (pass empty string to clear)"),
+          personality: z.string().optional().describe("New personality description (pass empty string to clear)"),
+          role: z.string().optional().describe("New role description (pass empty string to clear)"),
+          tone: z.string().optional().describe("New communication tone (pass empty string to clear)"),
+          pronouns: z.string().optional().describe("New pronouns (pass empty string to clear)"),
+          languages: z.array(z.string()).optional().describe("Languages the agent speaks"),
+          guidelines: z.array(z.string()).optional().describe("Behavioral guidelines for the agent"),
+          userName: z.string().optional().describe("Name of the user the agent serves"),
+          userTimezone: z.string().optional().describe("User's timezone (e.g. 'America/New_York')"),
+          userLocation: z.string().optional().describe("User's location"),
+          userContext: z.string().optional().describe("Additional context about the user"),
+          heartbeat: z
+            .object({
+              enabled: z.boolean().describe("Whether heartbeat is enabled"),
+              intervalMinutes: z.number().describe("Minutes between heartbeats (default: 30)"),
+              quietHoursStart: z.string().optional().describe("Start of quiet hours in HH:MM format (e.g. '23:00')"),
+              quietHoursEnd: z.string().optional().describe("End of quiet hours in HH:MM format (e.g. '07:00')"),
+            })
+            .optional()
+            .describe("Heartbeat configuration — periodic open-ended check-ins"),
+          memoryConsolidation: z
+            .object({
+              enabled: z.boolean().describe("Whether daily memory consolidation is enabled"),
+              timeOfDay: z.string().describe("Time to run daily in HH:MM format (e.g. '03:00')"),
+              retentionDays: z.number().describe("How many days of journals to review (default: 14)"),
+            })
+            .optional()
+            .describe("Memory consolidation configuration — daily distillation of journal entries"),
+          mcpKeyAlias: z.string().optional().describe("MCP secure proxy key alias for this agent"),
+        },
+        async (args) => {
+          try {
+            // Check agent exists
+            const existing = getAgent(args.alias);
+            if (!existing) {
+              return { content: [{ type: "text" as const, text: `Error: Agent "${args.alias}" not found` }] };
+            }
+
+            // Build updated config — only override fields present in args
+            const updated: AgentConfig = {
+              ...existing,
+              ...(args.name !== undefined && { name: args.name.trim() }),
+              ...(args.description !== undefined && { description: args.description.trim() }),
+              ...(args.systemPrompt !== undefined && { systemPrompt: args.systemPrompt?.trim() || undefined }),
+              ...(args.emoji !== undefined && { emoji: args.emoji || undefined }),
+              ...(args.personality !== undefined && { personality: args.personality?.trim() || undefined }),
+              ...(args.role !== undefined && { role: args.role?.trim() || undefined }),
+              ...(args.tone !== undefined && { tone: args.tone?.trim() || undefined }),
+              ...(args.pronouns !== undefined && { pronouns: args.pronouns?.trim() || undefined }),
+              ...(args.languages !== undefined && { languages: args.languages }),
+              ...(args.guidelines !== undefined && { guidelines: args.guidelines }),
+              ...(args.userName !== undefined && { userName: args.userName?.trim() || undefined }),
+              ...(args.userTimezone !== undefined && { userTimezone: args.userTimezone?.trim() || undefined }),
+              ...(args.userLocation !== undefined && { userLocation: args.userLocation?.trim() || undefined }),
+              ...(args.userContext !== undefined && { userContext: args.userContext?.trim() || undefined }),
+              ...(args.heartbeat !== undefined && { heartbeat: args.heartbeat }),
+              ...(args.memoryConsolidation !== undefined && { memoryConsolidation: args.memoryConsolidation }),
+              ...(args.mcpKeyAlias !== undefined && { mcpKeyAlias: args.mcpKeyAlias }),
+            };
+
+            // Validate required fields after merge
+            if (!updated.name || updated.name.length === 0 || updated.name.length > 128) {
+              return { content: [{ type: "text" as const, text: "Error: Name must be 1-128 characters" }] };
+            }
+
+            if (!updated.description || updated.description.length === 0 || updated.description.length > 512) {
+              return { content: [{ type: "text" as const, text: "Error: Description must be 1-512 characters" }] };
+            }
+
+            // Persist (createAgent acts as upsert)
+            createAgent(updated);
+
+            // Sync heartbeat system if heartbeat config changed
+            if (args.heartbeat !== undefined) {
+              updateHeartbeatConfig(args.alias, args.heartbeat || { enabled: false, intervalMinutes: 30 });
+            }
+
+            // Sync memory consolidation system if config changed
+            if (args.memoryConsolidation !== undefined) {
+              updateConsolidationConfig(args.alias, args.memoryConsolidation || { enabled: false, timeOfDay: "03:00", retentionDays: 14 });
+            }
+
+            const workspacePath = ensureAgentWorkspaceDir(args.alias);
+
+            log.info(`Agent ${agentAlias} updated agent: ${args.alias}`);
+            appendActivity(agentAlias, {
+              type: "system",
+              message: `Updated agent: ${updated.name} (${args.alias})`,
+              metadata: { updatedAlias: args.alias },
+            });
+
+            return { content: [{ type: "text" as const, text: JSON.stringify({ ...updated, workspacePath }, null, 2) }] };
+          } catch (err: any) {
+            log.error(`update_agent failed: ${err.message}`);
+            return { content: [{ type: "text" as const, text: `Error updating agent: ${err.message}` }] };
           }
         },
       ),
