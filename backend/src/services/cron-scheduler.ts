@@ -7,7 +7,7 @@
  */
 import cron from "node-cron";
 import { CronExpressionParser } from "cron-parser";
-import { listAgents } from "./agent-file-service.js";
+import { listAgents, getAgent } from "./agent-file-service.js";
 import { listCronJobs, updateCronJob, ensureDefaultCronJobs } from "./agent-cron-jobs.js";
 import { executeAgent } from "./agent-executor.js";
 import { createLogger } from "../utils/logger.js";
@@ -64,39 +64,49 @@ export function scheduleJob(alias: string, job: CronJob): boolean {
   // Cancel existing task if present
   cancelJob(job.id);
 
-  const task = cron.schedule(job.schedule, async () => {
-    log.info(`Cron job fired: ${job.name} (${job.id}) for agent ${alias}`);
+  // Resolve the agent's timezone (if configured) so cron fires in the user's local time
+  const agentConfig = getAgent(alias);
+  const timezone = agentConfig?.userTimezone;
 
-    // Update lastRun timestamp
-    const now = Date.now();
-    updateCronJob(alias, job.id, { lastRun: now });
+  const task = cron.schedule(
+    job.schedule,
+    async () => {
+      log.info(`Cron job fired: ${job.name} (${job.id}) for agent ${alias}`);
 
-    // Execute the agent
-    const prompt = job.action?.prompt || `Cron job "${job.name}" fired. Execute the scheduled task.`;
-    await executeAgent({
-      agentAlias: alias,
-      prompt,
-      triggeredBy: "cron",
-      metadata: { jobId: job.id, jobName: job.name, schedule: job.schedule },
-      maxTurns: job.action?.maxTurns,
-    });
+      // Update lastRun timestamp
+      const now = Date.now();
+      updateCronJob(alias, job.id, { lastRun: now });
 
-    // For one-off jobs, mark as completed after first execution
-    if (job.type === "one-off") {
-      log.info(`One-off cron job completed: ${job.name} (${job.id})`);
-      updateCronJob(alias, job.id, { status: "completed" });
-      cancelJob(job.id);
-    }
+      // Execute the agent
+      const prompt = job.action?.prompt || `Cron job "${job.name}" fired. Execute the scheduled task.`;
+      await executeAgent({
+        agentAlias: alias,
+        prompt,
+        triggeredBy: "cron",
+        metadata: { jobId: job.id, jobName: job.name, schedule: job.schedule },
+        maxTurns: job.action?.maxTurns,
+      });
 
-    // Compute and store nextRun
-    computeAndStoreNextRun(alias, job);
-  });
+      // For one-off jobs, mark as completed after first execution
+      if (job.type === "one-off") {
+        log.info(`One-off cron job completed: ${job.name} (${job.id})`);
+        updateCronJob(alias, job.id, { status: "completed" });
+        cancelJob(job.id);
+      }
+
+      // Compute and store nextRun
+      computeAndStoreNextRun(alias, job, timezone);
+    },
+    {
+      ...(timezone ? { timezone } : {}),
+    },
+  );
 
   scheduledTasks.set(job.id, task);
   jobAgentMap.set(job.id, alias);
 
   // Set initial nextRun
-  computeAndStoreNextRun(alias, job);
+  computeAndStoreNextRun(alias, job, timezone);
 
   log.debug(`Scheduled job ${job.id} (${job.name}) for agent ${alias}: ${job.schedule}`);
   return true;
@@ -155,9 +165,11 @@ export function cancelAllJobsForAgent(alias: string): void {
 /**
  * Compute the next run time for a cron job and persist it.
  */
-function computeAndStoreNextRun(alias: string, job: CronJob): void {
+function computeAndStoreNextRun(alias: string, job: CronJob, timezone?: string): void {
   try {
-    const interval = CronExpressionParser.parse(job.schedule);
+    const interval = CronExpressionParser.parse(job.schedule, {
+      ...(timezone ? { tz: timezone } : {}),
+    });
     const nextRun = interval.next().toDate().getTime();
     updateCronJob(alias, job.id, { nextRun });
   } catch {

@@ -112,6 +112,9 @@ function readSessionMessages(sessionId: string, limit: number = 50): string[] {
  * only access that agent's data. Orchestration tools can target other agents.
  */
 export function buildAgentToolsServer(agentAlias: string) {
+  const agentConfig = getAgent(agentAlias);
+  const agentTimezone = agentConfig?.userTimezone || "UTC";
+
   return createSdkMcpServer({
     name: "ccui",
     version: "1.0.0",
@@ -526,10 +529,12 @@ export function buildAgentToolsServer(agentAlias: string) {
 
       tool(
         "create_cron_job",
-        "Create a new scheduled cron job for your agent. The job will execute on the specified schedule using local system time.",
+        `Create a new scheduled cron job for your agent. The job will execute on the specified schedule interpreted in the ${agentTimezone} timezone.`,
         {
           name: z.string().describe("Human-readable name for the job"),
-          schedule: z.string().describe("Cron expression (e.g., '0 9 * * *' for daily at 9am, '*/30 * * * *' for every 30 min)"),
+          schedule: z
+            .string()
+            .describe(`Cron expression (e.g., '0 9 * * *' for daily at 9am, '*/30 * * * *' for every 30 min). Times are in ${agentTimezone}.`),
           prompt: z.string().describe("The task prompt that will be sent to your agent when the job fires"),
           type: z.enum(["one-off", "recurring", "indefinite"]).optional().describe("Job type (default: recurring)"),
           description: z.string().optional().describe("Description of what this job does"),
@@ -569,11 +574,11 @@ export function buildAgentToolsServer(agentAlias: string) {
 
       tool(
         "update_cron_job",
-        "Update an existing cron job. You can change the name, schedule, prompt, status (active/paused), or type.",
+        `Update an existing cron job. You can change the name, schedule, prompt, status (active/paused), or type. Schedule times are interpreted in the ${agentTimezone} timezone.`,
         {
           jobId: z.string().describe("The ID of the cron job to update"),
           name: z.string().optional().describe("New name"),
-          schedule: z.string().optional().describe("New cron expression"),
+          schedule: z.string().optional().describe(`New cron expression. Times are in ${agentTimezone}.`),
           prompt: z.string().optional().describe("New task prompt"),
           status: z.enum(["active", "paused", "completed"]).optional().describe("New status"),
           type: z.enum(["one-off", "recurring", "indefinite"]).optional().describe("New type"),
