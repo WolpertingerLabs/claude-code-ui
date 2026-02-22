@@ -1,14 +1,16 @@
 /**
  * Agent settings routes.
  *
- *   GET  /api/agent-settings              — get current settings
- *   PUT  /api/agent-settings              — update settings
- *   GET  /api/agent-settings/key-aliases  — discover key aliases from MCP config dir
+ *   GET  /api/agent-settings                  — get current settings
+ *   PUT  /api/agent-settings                  — update settings
+ *   GET  /api/agent-settings/key-aliases      — discover key aliases from MCP config dir
+ *   POST /api/agent-settings/test-connection  — test remote proxy connection
  */
 import { Router } from "express";
 import type { Request, Response } from "express";
 import { getAgentSettings, updateAgentSettings, discoverKeyAliases } from "../services/agent-settings.js";
 import { resetAllClients } from "../services/proxy-singleton.js";
+import { testRemoteConnection } from "../services/proxy-singleton.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("agent-settings-routes");
@@ -52,5 +54,22 @@ agentSettingsRouter.get("/key-aliases", (_req: Request, res: Response): void => 
   } catch (err: any) {
     log.error(`Error discovering key aliases: ${err.message}`);
     res.status(500).json({ error: "Failed to discover key aliases" });
+  }
+});
+
+/** POST /api/agent-settings/test-connection — test remote proxy server connection */
+agentSettingsRouter.post("/test-connection", async (req: Request, res: Response): Promise<void> => {
+  const { url, alias } = req.body;
+  if (!url) {
+    res.status(400).json({ error: "url is required" });
+    return;
+  }
+
+  try {
+    const result = await testRemoteConnection(url, alias || "default");
+    res.json(result);
+  } catch (err: any) {
+    log.error(`Error testing connection: ${err.message}`);
+    res.status(500).json({ error: "Failed to test connection" });
   }
 });
