@@ -83,6 +83,47 @@ export function deleteCronJob(alias: string, jobId: string): boolean {
 const HEARTBEAT_PROMPT =
   "Read HEARTBEAT.md if it exists in your workspace. Follow any instructions in it. " + "If nothing needs attention, reply HEARTBEAT_OK.";
 
+const CONSOLIDATION_PROMPT = [
+  "# Daily Memory Consolidation",
+  "",
+  "This is your scheduled nightly memory consolidation task.",
+  "",
+  "## Step 1: Review Recent Journals",
+  "",
+  "Read all daily journal files in `memory/` from the past 14 days.",
+  "Focus on entries you haven't already consolidated into MEMORY.md.",
+  "",
+  "## Step 2: Update MEMORY.md",
+  "",
+  "Read MEMORY.md first (to avoid overwriting recent changes).",
+  "Then distill significant insights, decisions, lessons learned, and important context from recent journals into MEMORY.md.",
+  "",
+  "Guidelines:",
+  "- Add new entries under appropriate headings (create headings as needed)",
+  "- Remove or update outdated information that is no longer relevant",
+  "- Keep it curated — MEMORY.md is your long-term memory, not a dump of everything",
+  "- Include dates for time-sensitive context",
+  "- Preserve the existing structure and tone",
+  "",
+  "## Step 3: Update Other Files (If Relevant)",
+  "",
+  "Review recent journals for information that belongs in other workspace files:",
+  "- SOUL.md — your personality, self-knowledge, preferences",
+  "- USER.md — what you've learned about your human",
+  "- TOOLS.md — tool usage patterns, configurations, tips",
+  "- Or create a new file if the information doesn't fit existing files.",
+  "",
+  "Only update these if there is genuinely new, relevant information. Read each file first before updating.",
+  "",
+  "## Step 4: Log Summary",
+  "",
+  "After completing all steps, append a brief note to today's journal in `memory/`:",
+  "- How many journals you reviewed",
+  "- Key insights consolidated (if any)",
+  "",
+  "Keep the consolidation note to 2-3 lines. If there was nothing significant to consolidate, just note that.",
+].join("\n");
+
 const DEFAULT_CRON_JOBS: Array<Omit<CronJob, "id">> = [
   {
     name: "Heartbeat",
@@ -93,6 +134,18 @@ const DEFAULT_CRON_JOBS: Array<Omit<CronJob, "id">> = [
     action: {
       type: "start_session",
       prompt: HEARTBEAT_PROMPT,
+    },
+    isDefault: true,
+  },
+  {
+    name: "Memory Consolidation",
+    schedule: "0 3 * * *",
+    type: "recurring",
+    status: "active",
+    description: "Nightly review of journal entries. Distills insights into MEMORY.md and updates SOUL.md, USER.md, TOOLS.md as needed.",
+    action: {
+      type: "start_session",
+      prompt: CONSOLIDATION_PROMPT,
     },
     isDefault: true,
   },
