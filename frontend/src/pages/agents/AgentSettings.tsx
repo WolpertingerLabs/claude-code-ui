@@ -1,10 +1,10 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { ArrowLeft, FolderOpen, Check, Save, KeyRound, Globe, Monitor } from "lucide-react";
+import { ArrowLeft, FolderOpen, Check, Save, KeyRound, Globe, Monitor, Wifi, WifiOff, ShieldAlert, Loader2 } from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import FolderBrowser from "../../components/FolderBrowser";
-import { getAgentSettings, updateAgentSettings, getKeyAliases } from "../../api";
-import type { AgentSettings, KeyAliasInfo } from "../../api";
+import { getAgentSettings, updateAgentSettings, getKeyAliases, testProxyConnection } from "../../api";
+import type { AgentSettings, KeyAliasInfo, ConnectionTestResult } from "../../api";
 
 export default function AgentSettingsPage() {
   const navigate = useNavigate();
@@ -18,6 +18,8 @@ export default function AgentSettingsPage() {
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [testing, setTesting] = useState(false);
+  const [testResult, setTestResult] = useState<ConnectionTestResult | null>(null);
 
   // Load settings on mount
   useEffect(() => {
@@ -69,6 +71,20 @@ export default function AgentSettingsPage() {
     setMcpConfigDir(path);
     setShowFolderBrowser(false);
     setSaved(false);
+  };
+
+  const handleTestConnection = async () => {
+    if (!remoteServerUrl) return;
+    setTesting(true);
+    setTestResult(null);
+    try {
+      const result = await testProxyConnection(remoteServerUrl);
+      setTestResult(result);
+    } catch {
+      setTestResult({ status: "unreachable", message: "Failed to reach backend" });
+    } finally {
+      setTesting(false);
+    }
   };
 
   if (loading) return null;
@@ -367,26 +383,111 @@ export default function AgentSettingsPage() {
             {proxyMode === "remote" && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 500, marginBottom: 6 }}>Server URL</div>
-                <input
-                  type="text"
-                  value={remoteServerUrl}
-                  onChange={(e) => {
-                    setRemoteServerUrl(e.target.value);
-                    setSaved(false);
-                  }}
-                  placeholder="e.g. https://proxy.example.com:9999"
-                  style={{
-                    width: "100%",
-                    padding: "10px 12px",
-                    borderRadius: 8,
-                    border: "1px solid var(--border)",
-                    background: "var(--bg)",
-                    color: "var(--text)",
-                    fontSize: 14,
-                    fontFamily: "monospace",
-                    boxSizing: "border-box",
-                  }}
-                />
+                <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <input
+                    type="text"
+                    value={remoteServerUrl}
+                    onChange={(e) => {
+                      setRemoteServerUrl(e.target.value);
+                      setSaved(false);
+                      setTestResult(null);
+                    }}
+                    placeholder="e.g. https://proxy.example.com:9999"
+                    style={{
+                      flex: 1,
+                      padding: "10px 12px",
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: "var(--bg)",
+                      color: "var(--text)",
+                      fontSize: 14,
+                      fontFamily: "monospace",
+                      boxSizing: "border-box",
+                    }}
+                  />
+                  <button
+                    onClick={handleTestConnection}
+                    disabled={testing || !remoteServerUrl}
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      border: "1px solid var(--border)",
+                      background: "var(--bg)",
+                      color: testing || !remoteServerUrl ? "var(--text-muted)" : "var(--text)",
+                      fontSize: 13,
+                      fontWeight: 500,
+                      cursor: testing || !remoteServerUrl ? "not-allowed" : "pointer",
+                      flexShrink: 0,
+                      transition: "background 0.15s",
+                      opacity: testing || !remoteServerUrl ? 0.6 : 1,
+                    }}
+                    onMouseEnter={(e) => {
+                      if (!testing && remoteServerUrl) e.currentTarget.style.background = "var(--bg-secondary)";
+                    }}
+                    onMouseLeave={(e) => {
+                      e.currentTarget.style.background = "var(--bg)";
+                    }}
+                  >
+                    {testing ? <Loader2 size={14} style={{ animation: "spin 1s linear infinite" }} /> : <Wifi size={14} />}
+                    {testing ? "Testing..." : "Test"}
+                  </button>
+                </div>
+
+                {/* Connection test result */}
+                {testResult && (
+                  <div
+                    style={{
+                      marginTop: 10,
+                      padding: "10px 14px",
+                      borderRadius: 8,
+                      fontSize: 12,
+                      lineHeight: 1.5,
+                      display: "flex",
+                      alignItems: "flex-start",
+                      gap: 8,
+                      border: `1px solid ${
+                        testResult.status === "connected"
+                          ? "color-mix(in srgb, #22c55e 30%, transparent)"
+                          : testResult.status === "handshake_failed"
+                            ? "color-mix(in srgb, #f59e0b 30%, transparent)"
+                            : "color-mix(in srgb, #ef4444 30%, transparent)"
+                      }`,
+                      background:
+                        testResult.status === "connected"
+                          ? "color-mix(in srgb, #22c55e 8%, transparent)"
+                          : testResult.status === "handshake_failed"
+                            ? "color-mix(in srgb, #f59e0b 8%, transparent)"
+                            : "color-mix(in srgb, #ef4444 8%, transparent)",
+                      color:
+                        testResult.status === "connected"
+                          ? "#22c55e"
+                          : testResult.status === "handshake_failed"
+                            ? "#f59e0b"
+                            : "#ef4444",
+                    }}
+                  >
+                    {testResult.status === "connected" ? (
+                      <Check size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    ) : testResult.status === "handshake_failed" ? (
+                      <ShieldAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    ) : (
+                      <WifiOff size={14} style={{ flexShrink: 0, marginTop: 1 }} />
+                    )}
+                    <div>
+                      <div style={{ fontWeight: 600, marginBottom: 2 }}>
+                        {testResult.status === "connected"
+                          ? "Connected"
+                          : testResult.status === "handshake_failed"
+                            ? "Handshake Failed"
+                            : "Unreachable"}
+                      </div>
+                      <div style={{ opacity: 0.85 }}>{testResult.message}</div>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

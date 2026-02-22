@@ -178,3 +178,93 @@ export function getSharedProxyClient(): ProxyClient | null {
   if (aliases.length === 0) return null;
   return getProxyClient(aliases[0]);
 }
+
+// ── Connection testing ──────────────────────────────────────────────
+
+export interface ConnectionTestResult {
+  /** "unreachable" | "handshake_failed" | "connected" */
+  status: "unreachable" | "handshake_failed" | "connected";
+  /** Human-readable detail */
+  message: string;
+  /** Number of routes discovered (only when connected) */
+  routeCount?: number;
+}
+
+/**
+ * Test connectivity to a remote proxy server.
+ *
+ * 1. Health check — is the server reachable?
+ * 2. Full handshake — are keys valid and authorized?
+ * 3. List routes — can we make authenticated requests?
+ */
+export async function testRemoteConnection(url: string, alias: string): Promise<ConnectionTestResult> {
+  // ── Step 1: Health check ──────────────────────────────────────────
+  try {
+    const healthRes = await fetch(`${url}/health`, {
+      signal: AbortSignal.timeout(5000),
+    });
+    if (!healthRes.ok) {
+      return {
+        status: "unreachable",
+        message: `Server responded with HTTP ${healthRes.status}`,
+      };
+    }
+  } catch (err: any) {
+    const code = err?.cause?.code || err?.code || "";
+    if (code === "ECONNREFUSED") {
+      return { status: "unreachable", message: "Connection refused — server may not be running" };
+    }
+    if (code === "ENOTFOUND") {
+      return { status: "unreachable", message: "Host not found — check the URL" };
+    }
+    if (err.name === "TimeoutError" || err.name === "AbortError") {
+      return { status: "unreachable", message: "Connection timed out — server may not be running" };
+    }
+    return { status: "unreachable", message: `Cannot reach server: ${err.message}` };
+  }
+
+  // ── Step 2: Handshake ─────────────────────────────────────────────
+  const paths = resolveKeyPaths(alias);
+  if (!paths) {
+    return {
+      status: "handshake_failed",
+      message: `No valid keys found for alias "${alias}". Check that keys exist in the MCP config directory.`,
+    };
+  }
+
+  let client: ProxyClient;
+  try {
+    client = new ProxyClient(url, paths.keysDir, paths.remoteKeysDir);
+  } catch (err: any) {
+    return {
+      status: "handshake_failed",
+      message: `Failed to load keys: ${err.message}`,
+    };
+  }
+
+  try {
+    await client.handshake();
+  } catch (err: any) {
+    return {
+      status: "handshake_failed",
+      message: `Handshake failed: ${err.message}`,
+    };
+  }
+
+  // ── Step 3: List routes (proves the encrypted channel works) ──────
+  try {
+    const routes = (await client.callTool("list_routes")) as any[];
+    return {
+      status: "connected",
+      message: `Connected successfully — ${routes?.length ?? 0} route(s) available`,
+      routeCount: routes?.length ?? 0,
+    };
+  } catch (err: any) {
+    // Handshake succeeded but request failed — still partially connected
+    return {
+      status: "connected",
+      message: `Handshake succeeded but route listing failed: ${err.message}`,
+      routeCount: 0,
+    };
+  }
+}

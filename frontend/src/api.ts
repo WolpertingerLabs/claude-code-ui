@@ -661,6 +661,23 @@ export async function getKeyAliases(): Promise<KeyAliasInfo[]> {
   return data.aliases;
 }
 
+export interface ConnectionTestResult {
+  status: "unreachable" | "handshake_failed" | "connected";
+  message: string;
+  routeCount?: number;
+}
+
+export async function testProxyConnection(url: string, alias?: string): Promise<ConnectionTestResult> {
+  const res = await fetch(`${BASE}/agent-settings/test-connection`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    credentials: "include",
+    body: JSON.stringify({ url, alias }),
+  });
+  await assertOk(res, "Failed to test connection");
+  return res.json();
+}
+
 // Agent activity API functions
 
 export async function getAgentActivity(alias: string, type?: string, limit?: number, offset?: number): Promise<ActivityEntry[]> {
