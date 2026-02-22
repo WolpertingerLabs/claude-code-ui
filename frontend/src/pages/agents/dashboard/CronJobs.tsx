@@ -37,7 +37,7 @@ const statusConfig: Record<string, { color: string; icon: typeof Play; label: st
  * Lightweight cron-expression → human-readable string converter.
  * Handles common patterns; falls back to the raw expression for exotic ones.
  */
-function describeCron(expr: string): string {
+function describeCron(expr: string, timezone: string): string {
   const parts = expr.trim().split(/\s+/);
   if (parts.length !== 5) return expr;
 
@@ -94,36 +94,36 @@ function describeCron(expr: string): string {
 
   // Daily
   if (dom === "*" && month === "*" && dow === "*") {
-    return `Daily at ${timeStr} UTC`;
+    return `Daily at ${timeStr} ${timezone}`;
   }
 
   // Day-of-week patterns
   if (dom === "*" && month === "*" && dow !== "*") {
-    if (dow === "1-5" || dow.toUpperCase() === "MON-FRI") return `Weekdays at ${timeStr} UTC`;
-    if (dow === "0,6" || dow.toUpperCase() === "SAT,SUN") return `Weekends at ${timeStr} UTC`;
+    if (dow === "1-5" || dow.toUpperCase() === "MON-FRI") return `Weekdays at ${timeStr} ${timezone}`;
+    if (dow === "0,6" || dow.toUpperCase() === "SAT,SUN") return `Weekends at ${timeStr} ${timezone}`;
 
     const names = dow.split(",").map((d) => {
       const i = parseInt(d);
       return isNaN(i) ? d : dayNames[i] || d;
     });
-    return `${names.join(", ")} at ${timeStr} UTC`;
+    return `${names.join(", ")} at ${timeStr} ${timezone}`;
   }
 
   // Specific month + day (e.g. Feb 21)
   if (dom !== "*" && month !== "*" && dow === "*") {
     const mi = parseInt(month);
     const monthName = isNaN(mi) ? month : monthNames[mi - 1] || month;
-    return `${monthName} ${dom} at ${timeStr} UTC`;
+    return `${monthName} ${dom} at ${timeStr} ${timezone}`;
   }
 
   // Day of month, every month
   if (dom !== "*" && month === "*" && dow === "*") {
     const d = parseInt(dom);
-    return isNaN(d) ? expr : `${ordinal(d)} of every month at ${timeStr} UTC`;
+    return isNaN(d) ? expr : `${ordinal(d)} of every month at ${timeStr} ${timezone}`;
   }
 
   // Fallback: show time + raw expression
-  return `${timeStr} UTC — ${expr}`;
+  return `${timeStr} ${timezone} — ${expr}`;
 }
 
 const typeConfig: Record<string, { color: string; icon: typeof Clock }> = {
@@ -226,7 +226,10 @@ export default function CronJobs() {
       >
         <div>
           <h1 style={{ fontSize: 20, fontWeight: 700 }}>Cron Jobs</h1>
-          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>Scheduled tasks and timed events</p>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
+            Scheduled tasks and timed events
+            <span style={{ marginLeft: 6, opacity: 0.7 }}>({agent.userTimezone || "UTC"})</span>
+          </p>
         </div>
         <button
           onClick={() => setShowForm(!showForm)}
@@ -408,7 +411,7 @@ export default function CronJobs() {
                   }}
                 >
                   <Clock size={13} />
-                  <span>{describeCron(job.schedule)}</span>
+                  <span>{describeCron(job.schedule, agent.userTimezone || "UTC")}</span>
                   <span style={{ opacity: 0.5 }}>({job.schedule})</span>
                 </div>
 
