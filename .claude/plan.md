@@ -3,16 +3,17 @@
 ## Stage Dependency Graph
 
 ```
-mcp-secure-proxy Stage 1  ──→  claude-code-ui Stage 1
+mcp-secure-proxy Stage 1  ──→  claude-code-ui Stage 1  ✅ COMPLETE
   (exports + executeProxyRequest)    (LocalProxy + proxy tools for all sessions)
 
-mcp-secure-proxy Stage 2  ──→  claude-code-ui Stage 2
+mcp-secure-proxy Stage 2  ──→  claude-code-ui Stage 2  ✅ COMPLETE
   (connection template introspection) (connection management UI, local mode)
+                                      + multi-alias caller support
 
-mcp-secure-proxy Stage 3  ──→  claude-code-ui Stage 3
+mcp-secure-proxy Stage 3  ──→  claude-code-ui Stage 3  ⬚ PENDING
   (admin API + bootstrap)            (remote provisioning + key management)
 
-                                claude-code-ui Stage 4
+                                claude-code-ui Stage 4  ⬚ PENDING
                                 (setup wizard + polish)
 ```
 
@@ -20,7 +21,7 @@ Each stage ships independently and delivers standalone value.
 
 ---
 
-## Stage 1: LocalProxy + Proxy Tools for All Sessions
+## Stage 1: LocalProxy + Proxy Tools for All Sessions ✅ COMPLETE
 
 ### Problem
 
@@ -439,7 +440,11 @@ Update the `PUT /api/agent-settings` route to accept `proxyMode` and `remoteServ
 
 ---
 
-## Stage 2: Connection Management UI (Local Mode)
+## Stage 2: Connection Management UI (Local Mode) ✅ COMPLETE
+
+> **Additional work completed beyond original plan:** Multi-alias caller support —
+> per-caller env var prefixing, CallerConfig.env mappings, caller selector dropdown,
+> CRUD for caller aliases, per-caller route resolution in LocalProxy.
 
 ### Problem
 
