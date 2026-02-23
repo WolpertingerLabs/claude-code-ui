@@ -1,7 +1,8 @@
 import { useState, useEffect } from "react";
 // useOutletContext removed — agent is now passed as a prop
-import { Plus, Play, Pause, CheckCircle, Clock, RotateCcw, Calendar, Trash2, X } from "lucide-react";
+import { Plus, Play, Pause, CheckCircle, Clock, RotateCcw, Calendar, Trash2, X, Pencil } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
+import ConfirmModal from "../../../components/ConfirmModal";
 import { getAgentCronJobs, createAgentCronJob, updateAgentCronJob, deleteAgentCronJob } from "../../../api";
 import type { CronJob, AgentConfig } from "../../../api";
 
@@ -185,13 +186,25 @@ export default function CronJobs({ agent }: { agent: AgentConfig }) {
   const [loading, setLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
 
-  // Form state
+  // Create form state
   const [formName, setFormName] = useState("");
   const [formSchedule, setFormSchedule] = useState("");
   const [formType, setFormType] = useState<CronJob["type"]>("recurring");
   const [formDescription, setFormDescription] = useState("");
   const [formPrompt, setFormPrompt] = useState("");
   const [formSaving, setFormSaving] = useState(false);
+
+  // Delete confirmation state
+  const [deleteTarget, setDeleteTarget] = useState<CronJob | null>(null);
+
+  // Edit form state
+  const [editingJobId, setEditingJobId] = useState<string | null>(null);
+  const [editName, setEditName] = useState("");
+  const [editSchedule, setEditSchedule] = useState("");
+  const [editType, setEditType] = useState<CronJob["type"]>("recurring");
+  const [editDescription, setEditDescription] = useState("");
+  const [editPrompt, setEditPrompt] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
 
   const loadJobs = () => {
     setLoading(true);
@@ -213,12 +226,15 @@ export default function CronJobs({ agent }: { agent: AgentConfig }) {
     }
   };
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = async () => {
+    if (!deleteTarget) return;
     try {
-      await deleteAgentCronJob(agent.alias, id);
-      setJobs((prev) => prev.filter((j) => j.id !== id));
+      await deleteAgentCronJob(agent.alias, deleteTarget.id);
+      setJobs((prev) => prev.filter((j) => j.id !== deleteTarget.id));
     } catch {
       // ignore
+    } finally {
+      setDeleteTarget(null);
     }
   };
 
@@ -250,6 +266,41 @@ export default function CronJobs({ agent }: { agent: AgentConfig }) {
     }
   };
 
+  const startEditing = (job: CronJob) => {
+    setEditingJobId(job.id);
+    setEditName(job.name);
+    setEditSchedule(job.schedule);
+    setEditType(job.type);
+    setEditDescription(job.description);
+    setEditPrompt(job.action?.prompt || "");
+  };
+
+  const cancelEditing = () => {
+    setEditingJobId(null);
+  };
+
+  const handleEdit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingJobId || !editName.trim() || !editSchedule.trim() || !editDescription.trim()) return;
+
+    setEditSaving(true);
+    try {
+      const updated = await updateAgentCronJob(agent.alias, editingJobId, {
+        name: editName.trim(),
+        schedule: editSchedule.trim(),
+        type: editType,
+        description: editDescription.trim(),
+        action: { type: "start_session", prompt: editPrompt.trim() || undefined },
+      });
+      setJobs((prev) => prev.map((j) => (j.id === editingJobId ? updated : j)));
+      setEditingJobId(null);
+    } catch {
+      // ignore
+    } finally {
+      setEditSaving(false);
+    }
+  };
+
   const inputStyle: React.CSSProperties = {
     width: "100%",
     background: "var(--bg)",
@@ -257,6 +308,280 @@ export default function CronJobs({ agent }: { agent: AgentConfig }) {
     borderRadius: 8,
     padding: "10px 12px",
     fontSize: 14,
+  };
+
+  const scheduleTz = agent.userTimezone || agent.serverTimezone || "UTC";
+
+  // Split jobs into user-defined and system-defined
+  const userJobs = jobs.filter((j) => !j.isDefault);
+  const systemJobs = jobs.filter((j) => j.isDefault);
+
+  const renderJobCard = (job: CronJob) => {
+    // If this job is being edited, show the edit form
+    if (editingJobId === job.id) {
+      return (
+        <form
+          key={job.id}
+          onSubmit={handleEdit}
+          style={{
+            background: "var(--surface)",
+            border: "1px solid var(--accent)",
+            borderRadius: "var(--radius)",
+            padding: 20,
+            display: "flex",
+            flexDirection: "column",
+            gap: 14,
+          }}
+        >
+          <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} placeholder="Job name" style={inputStyle} />
+          <input
+            type="text"
+            value={editSchedule}
+            onChange={(e) => setEditSchedule(e.target.value)}
+            placeholder="Schedule (cron expression)"
+            style={inputStyle}
+          />
+          <select value={editType} onChange={(e) => setEditType(e.target.value as CronJob["type"])} style={{ ...inputStyle, cursor: "pointer" }}>
+            <option value="recurring">Recurring</option>
+            <option value="one-off">One-off</option>
+            <option value="indefinite">Indefinite</option>
+          </select>
+          <input type="text" value={editDescription} onChange={(e) => setEditDescription(e.target.value)} placeholder="Description" style={inputStyle} />
+          <textarea
+            value={editPrompt}
+            onChange={(e) => setEditPrompt(e.target.value)}
+            placeholder="Prompt for the agent (optional)"
+            rows={3}
+            style={{ ...inputStyle, resize: "vertical", minHeight: 60 }}
+          />
+          <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+            <button
+              type="button"
+              onClick={cancelEditing}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+              }}
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={!editName.trim() || !editSchedule.trim() || !editDescription.trim() || editSaving}
+              style={{
+                padding: "8px 14px",
+                borderRadius: 6,
+                fontSize: 13,
+                fontWeight: 500,
+                background: "var(--accent)",
+                color: "#fff",
+                cursor: editSaving ? "not-allowed" : "pointer",
+              }}
+            >
+              {editSaving ? "Saving..." : "Save"}
+            </button>
+          </div>
+        </form>
+      );
+    }
+
+    // Display mode
+    const sConf = statusConfig[job.status] || statusConfig.active;
+    const tConf = typeConfig[job.type] || typeConfig.recurring;
+    const StatusIcon = sConf.icon;
+    const TypeIcon = tConf.icon;
+    const canToggle = job.status !== "completed";
+
+    return (
+      <div
+        key={job.id}
+        style={{
+          background: "var(--surface)",
+          border: "1px solid var(--border)",
+          borderRadius: "var(--radius)",
+          padding: isMobile ? "14px 16px" : "16px 20px",
+        }}
+      >
+        {/* Top row: name, status, type */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            gap: 10,
+            marginBottom: 8,
+            flexWrap: "wrap",
+          }}
+        >
+          <h3 style={{ fontSize: 15, fontWeight: 600 }}>
+            {job.name}
+            {job.isDefault && (
+              <span
+                style={{
+                  marginLeft: 8,
+                  fontSize: 10,
+                  fontWeight: 500,
+                  color: "var(--text-muted)",
+                  background: "var(--bg)",
+                  padding: "2px 6px",
+                  borderRadius: 4,
+                  border: "1px solid var(--border)",
+                  verticalAlign: "middle",
+                }}
+              >
+                System
+              </span>
+            )}
+          </h3>
+          <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 11,
+                fontWeight: 500,
+                color: tConf.color,
+                background: `color-mix(in srgb, ${tConf.color} 12%, transparent)`,
+                padding: "3px 8px",
+                borderRadius: 6,
+              }}
+            >
+              <TypeIcon size={12} />
+              {job.type}
+            </span>
+            <span
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                fontSize: 11,
+                fontWeight: 500,
+                color: sConf.color,
+                background: `color-mix(in srgb, ${sConf.color} 12%, transparent)`,
+                padding: "3px 8px",
+                borderRadius: 6,
+              }}
+            >
+              <StatusIcon size={12} />
+              {sConf.label}
+            </span>
+          </div>
+        </div>
+
+        {/* Schedule */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            fontSize: 13,
+            color: "var(--text-muted)",
+            marginBottom: 6,
+          }}
+        >
+          <Clock size={13} />
+          <span>{describeCron(job.schedule, scheduleTz)}</span>
+          <span style={{ opacity: 0.5 }}>({job.schedule})</span>
+        </div>
+
+        {/* Description */}
+        <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 10 }}>{job.description}</p>
+
+        {/* Footer */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            paddingTop: 10,
+            borderTop: "1px solid var(--border)",
+            gap: 10,
+            flexWrap: "wrap",
+          }}
+        >
+          <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
+            {job.lastRun && <span>Last run: {timeAgo(job.lastRun)}</span>}
+            {job.nextRun && <span style={{ color: "var(--text)" }}>Next run: {timeUntil(job.nextRun)}</span>}
+          </div>
+          <div style={{ display: "flex", gap: 8 }}>
+            {canToggle && (
+              <button
+                onClick={() => toggleJob(job.id, job.status)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 6,
+                  padding: "6px 12px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  background: "transparent",
+                  color: job.status === "active" ? "var(--warning)" : "var(--success)",
+                  border: `1px solid color-mix(in srgb, ${job.status === "active" ? "var(--warning)" : "var(--success)"} 30%, transparent)`,
+                  transition: "background 0.15s",
+                  cursor: "pointer",
+                }}
+                onMouseEnter={(e) =>
+                  (e.currentTarget.style.background = `color-mix(in srgb, ${job.status === "active" ? "var(--warning)" : "var(--success)"} 10%, transparent)`)
+                }
+                onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+              >
+                {job.status === "active" ? <Pause size={12} /> : <Play size={12} />}
+                {job.status === "active" ? "Pause" : "Resume"}
+              </button>
+            )}
+            <button
+              onClick={() => startEditing(job)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 4,
+                padding: "6px 10px",
+                borderRadius: 6,
+                fontSize: 12,
+                fontWeight: 500,
+                background: "transparent",
+                color: "var(--text-muted)",
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+                transition: "background 0.15s",
+              }}
+              onMouseEnter={(e) => (e.currentTarget.style.background = "color-mix(in srgb, var(--text-muted) 10%, transparent)")}
+              onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+            >
+              <Pencil size={12} />
+            </button>
+            {!job.isDefault && (
+              <button
+                onClick={() => setDeleteTarget(job)}
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 4,
+                  padding: "6px 10px",
+                  borderRadius: 6,
+                  fontSize: 12,
+                  fontWeight: 500,
+                  background: "transparent",
+                  color: "var(--danger, #f85149)",
+                  border: "1px solid color-mix(in srgb, var(--danger, #f85149) 30%, transparent)",
+                  cursor: "pointer",
+                }}
+              >
+                <Trash2 size={12} />
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
   };
 
   return (
@@ -361,177 +686,41 @@ export default function CronJobs({ agent }: { agent: AgentConfig }) {
         </div>
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-          {jobs.map((job) => {
-            const sConf = statusConfig[job.status] || statusConfig.active;
-            const tConf = typeConfig[job.type] || typeConfig.recurring;
-            const StatusIcon = sConf.icon;
-            const TypeIcon = tConf.icon;
-            const canToggle = job.status !== "completed";
+          {/* User-defined jobs */}
+          {userJobs.map(renderJobCard)}
 
-            return (
+          {/* System-defined jobs */}
+          {systemJobs.length > 0 && (
+            <>
               <div
-                key={job.id}
                 style={{
-                  background: "var(--surface)",
-                  border: "1px solid var(--border)",
-                  borderRadius: "var(--radius)",
-                  padding: isMobile ? "14px 16px" : "16px 20px",
+                  fontSize: 11,
+                  fontWeight: 600,
+                  color: "var(--text-muted)",
+                  textTransform: "uppercase",
+                  letterSpacing: "0.05em",
+                  marginTop: userJobs.length > 0 ? 12 : 0,
+                  marginBottom: 2,
+                  paddingLeft: 2,
                 }}
               >
-                {/* Top row: name, status, type */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    gap: 10,
-                    marginBottom: 8,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <h3 style={{ fontSize: 15, fontWeight: 600 }}>
-                    {job.name}
-                    {job.isDefault && (
-                      <span
-                        style={{
-                          marginLeft: 8,
-                          fontSize: 10,
-                          fontWeight: 500,
-                          color: "var(--text-muted)",
-                          background: "var(--bg)",
-                          padding: "2px 6px",
-                          borderRadius: 4,
-                          border: "1px solid var(--border)",
-                          verticalAlign: "middle",
-                        }}
-                      >
-                        Default
-                      </span>
-                    )}
-                  </h3>
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: tConf.color,
-                        background: `color-mix(in srgb, ${tConf.color} 12%, transparent)`,
-                        padding: "3px 8px",
-                        borderRadius: 6,
-                      }}
-                    >
-                      <TypeIcon size={12} />
-                      {job.type}
-                    </span>
-                    <span
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        fontSize: 11,
-                        fontWeight: 500,
-                        color: sConf.color,
-                        background: `color-mix(in srgb, ${sConf.color} 12%, transparent)`,
-                        padding: "3px 8px",
-                        borderRadius: 6,
-                      }}
-                    >
-                      <StatusIcon size={12} />
-                      {sConf.label}
-                    </span>
-                  </div>
-                </div>
-
-                {/* Schedule */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 6,
-                    fontSize: 13,
-                    color: "var(--text-muted)",
-                    marginBottom: 6,
-                  }}
-                >
-                  <Clock size={13} />
-                  <span>{describeCron(job.schedule, agent.userTimezone || agent.serverTimezone || "UTC")}</span>
-                  <span style={{ opacity: 0.5 }}>({job.schedule})</span>
-                </div>
-
-                {/* Description */}
-                <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.5, marginBottom: 10 }}>{job.description}</p>
-
-                {/* Footer */}
-                <div
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "space-between",
-                    paddingTop: 10,
-                    borderTop: "1px solid var(--border)",
-                    gap: 10,
-                    flexWrap: "wrap",
-                  }}
-                >
-                  <div style={{ display: "flex", gap: 16, fontSize: 12, color: "var(--text-muted)" }}>
-                    {job.lastRun && <span>Last run: {timeAgo(job.lastRun)}</span>}
-                    {job.nextRun && <span style={{ color: "var(--text)" }}>Next run: {timeUntil(job.nextRun)}</span>}
-                  </div>
-                  <div style={{ display: "flex", gap: 8 }}>
-                    {canToggle && (
-                      <button
-                        onClick={() => toggleJob(job.id, job.status)}
-                        style={{
-                          display: "flex",
-                          alignItems: "center",
-                          gap: 6,
-                          padding: "6px 12px",
-                          borderRadius: 6,
-                          fontSize: 12,
-                          fontWeight: 500,
-                          background: "transparent",
-                          color: job.status === "active" ? "var(--warning)" : "var(--success)",
-                          border: `1px solid color-mix(in srgb, ${job.status === "active" ? "var(--warning)" : "var(--success)"} 30%, transparent)`,
-                          transition: "background 0.15s",
-                          cursor: "pointer",
-                        }}
-                        onMouseEnter={(e) =>
-                          (e.currentTarget.style.background = `color-mix(in srgb, ${job.status === "active" ? "var(--warning)" : "var(--success)"} 10%, transparent)`)
-                        }
-                        onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-                      >
-                        {job.status === "active" ? <Pause size={12} /> : <Play size={12} />}
-                        {job.status === "active" ? "Pause" : "Resume"}
-                      </button>
-                    )}
-                    <button
-                      onClick={() => handleDelete(job.id)}
-                      style={{
-                        display: "flex",
-                        alignItems: "center",
-                        gap: 4,
-                        padding: "6px 10px",
-                        borderRadius: 6,
-                        fontSize: 12,
-                        fontWeight: 500,
-                        background: "transparent",
-                        color: "var(--danger, #f85149)",
-                        border: "1px solid color-mix(in srgb, var(--danger, #f85149) 30%, transparent)",
-                        cursor: "pointer",
-                      }}
-                    >
-                      <Trash2 size={12} />
-                    </button>
-                  </div>
-                </div>
+                System
               </div>
-            );
-          })}
+              {systemJobs.map(renderJobCard)}
+            </>
+          )}
         </div>
       )}
+      {/* Delete confirmation modal */}
+      <ConfirmModal
+        isOpen={!!deleteTarget}
+        onClose={() => setDeleteTarget(null)}
+        onConfirm={handleDelete}
+        title="Delete Cron Job"
+        message={`Are you sure you want to delete "${deleteTarget?.name}"? This action cannot be undone.`}
+        confirmText="Delete"
+        confirmStyle="danger"
+      />
     </div>
   );
 }

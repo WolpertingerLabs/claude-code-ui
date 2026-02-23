@@ -90,8 +90,9 @@ agentCronJobsRouter.put("/:jobId", (req: Request, res: Response): void => {
     return;
   }
 
-  const updates = req.body as Partial<CronJob>;
-  const job = updateCronJob(alias, jobId, updates);
+  // Strip protected fields — isDefault and id cannot be changed via API
+  const { id: _id, isDefault: _isDefault, ...safeUpdates } = req.body as Partial<CronJob>;
+  const job = updateCronJob(alias, jobId, safeUpdates);
 
   if (!job) {
     res.status(404).json({ error: "Cron job not found" });
@@ -114,6 +115,13 @@ agentCronJobsRouter.delete("/:jobId", (req: Request, res: Response): void => {
 
   if (!agentExists(alias)) {
     res.status(404).json({ error: "Agent not found" });
+    return;
+  }
+
+  // Prevent deletion of system-defined cron jobs
+  const existing = getCronJob(alias, jobId);
+  if (existing?.isDefault) {
+    res.status(403).json({ error: "System-defined cron jobs cannot be deleted. You can pause them instead." });
     return;
   }
 
