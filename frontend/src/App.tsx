@@ -15,10 +15,37 @@ import Connections from "./pages/agents/dashboard/Connections";
 import Events from "./pages/agents/dashboard/Events";
 import AgentActivity from "./pages/agents/dashboard/Activity";
 import Memory from "./pages/agents/dashboard/Memory";
+import { getThemeMode } from "./utils/localStorage";
+import type { ThemeMode } from "./utils/localStorage";
+
+function applyTheme(mode: ThemeMode) {
+  const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+  const resolved = mode === "system" ? (prefersDark ? "dark" : "light") : mode;
+  document.documentElement.dataset.theme = resolved;
+}
 
 export default function App() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [serverError, setServerError] = useState("");
+
+  // Theme management
+  useEffect(() => {
+    applyTheme(getThemeMode());
+
+    const onThemeChange = () => applyTheme(getThemeMode());
+    window.addEventListener("theme-change", onThemeChange);
+
+    const mediaQuery = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystemChange = () => {
+      if (getThemeMode() === "system") applyTheme("system");
+    };
+    mediaQuery.addEventListener("change", onSystemChange);
+
+    return () => {
+      window.removeEventListener("theme-change", onThemeChange);
+      mediaQuery.removeEventListener("change", onSystemChange);
+    };
+  }, []);
 
   useEffect(() => {
     fetch("/api/auth/check", { credentials: "include" })
