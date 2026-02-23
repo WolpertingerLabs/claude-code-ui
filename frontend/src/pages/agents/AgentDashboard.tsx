@@ -1,6 +1,18 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ArrowLeft, LayoutDashboard, MessageSquare, Clock, Zap, Plug, Radio, Activity, Brain, Bot } from "lucide-react";
+import {
+  ChevronLeft,
+  LayoutDashboard,
+  MessageSquare,
+  Clock,
+  Zap,
+  Plug,
+  Radio,
+  Activity,
+  Brain,
+  Bot,
+  ArrowLeft,
+} from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { getAgent as fetchAgent } from "../../api";
 import type { AgentConfig } from "shared";
@@ -107,46 +119,55 @@ export default function AgentDashboard() {
     );
   }
 
-  // ── Mobile layout: top header + content + bottom tab bar ──
-  if (isMobile) {
-    return (
-      <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
-        {/* Mobile header */}
-        <div
-          style={{
-            padding: "10px 16px",
-            borderBottom: "1px solid var(--border)",
-            display: "flex",
-            alignItems: "center",
-            gap: 10,
-            flexShrink: 0,
-          }}
-        >
+  // ── Unified layout: header + tab bar + content (both mobile & desktop) ──
+  return (
+    <div style={{ height: "100%", display: "flex", flexDirection: "column", overflow: "hidden" }}>
+      {/* Header */}
+      <header
+        style={{
+          padding: "12px 16px",
+          borderBottom: "1px solid var(--border)",
+          display: "flex",
+          alignItems: "center",
+          gap: 12,
+          flexShrink: 0,
+        }}
+      >
+        {isMobile && (
           <button
             onClick={() => navigate("/agents")}
             style={{
+              background: "none",
+              border: "none",
+              padding: "4px 8px",
+              cursor: "pointer",
+              color: "var(--text)",
               display: "flex",
               alignItems: "center",
-              justifyContent: "center",
-              background: "transparent",
-              padding: 6,
-              borderRadius: 6,
             }}
           >
-            <ArrowLeft size={20} style={{ color: "var(--text-muted)" }} />
+            <ChevronLeft size={20} />
           </button>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <h1
-              style={{
-                fontSize: 16,
-                fontWeight: 600,
-                overflow: "hidden",
-                textOverflow: "ellipsis",
-                whiteSpace: "nowrap",
-              }}
-            >
-              {agent.name}
-            </h1>
+        )}
+        <div
+          style={{
+            flex: 1,
+            minWidth: 0,
+            display: "flex",
+            alignItems: "center",
+            gap: 10,
+          }}
+        >
+          <div
+            style={{
+              fontSize: 18,
+              fontWeight: 600,
+              overflow: "hidden",
+              textOverflow: "ellipsis",
+              whiteSpace: "nowrap",
+            }}
+          >
+            {agent.name}
           </div>
           <span
             style={{
@@ -162,179 +183,83 @@ export default function AgentDashboard() {
             {agent.alias}
           </span>
         </div>
-
-        {/* Content area */}
-        <div style={{ flex: 1, overflow: "auto" }}>{renderSubPage()}</div>
-
-        {/* Mobile bottom tab bar */}
-        <div
-          style={{
-            borderTop: "1px solid var(--border)",
-            background: "var(--surface)",
-            display: "flex",
-            overflowX: "auto",
-            flexShrink: 0,
-            paddingBottom: "var(--safe-bottom)",
-          }}
-        >
-          {navItems.map((item) => {
-            const isActive = activeKey === item.key;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                onClick={() => navigate(item.key ? `${basePath}/${item.key}` : basePath)}
-                style={{
-                  display: "flex",
-                  flexDirection: "column",
-                  alignItems: "center",
-                  gap: 2,
-                  padding: "8px 12px",
-                  minWidth: 64,
-                  flex: "0 0 auto",
-                  background: "transparent",
-                  color: isActive ? "var(--accent)" : "var(--text-muted)",
-                  fontSize: 10,
-                  fontWeight: isActive ? 600 : 400,
-                  transition: "color 0.15s",
-                }}
-              >
-                <Icon size={18} />
-                {item.label}
-              </button>
-            );
-          })}
-        </div>
-      </div>
-    );
-  }
-
-  // ── Desktop layout: sidebar + content ──
-  return (
-    <div style={{ height: "100%", display: "flex", overflow: "hidden" }}>
-      {/* Sidebar */}
-      <div
-        style={{
-          width: 220,
-          flexShrink: 0,
-          borderRight: "1px solid var(--border)",
-          display: "flex",
-          flexDirection: "column",
-          background: "var(--surface)",
-        }}
-      >
-        {/* Agent info */}
-        <div style={{ padding: "20px 16px 16px", borderBottom: "1px solid var(--border)" }}>
-          <h2
-            style={{
-              fontSize: 15,
-              fontWeight: 600,
-              marginBottom: 4,
-              overflow: "hidden",
-              textOverflow: "ellipsis",
-              whiteSpace: "nowrap",
-            }}
-          >
-            {agent.name}
-          </h2>
-          <span
-            style={{
-              fontSize: 11,
-              fontFamily: "monospace",
-              color: "var(--accent)",
-              background: "color-mix(in srgb, var(--accent) 12%, transparent)",
-              padding: "2px 8px",
-              borderRadius: 6,
-              display: "inline-block",
-            }}
-          >
-            {agent.alias}
-          </span>
-        </div>
-
-        {/* Nav items */}
-        <nav style={{ flex: 1, padding: "8px", display: "flex", flexDirection: "column", gap: 2 }}>
-          {navItems.map((item) => {
-            const isActive = activeKey === item.key;
-            const Icon = item.icon;
-            return (
-              <button
-                key={item.key}
-                onClick={() => navigate(item.key ? `${basePath}/${item.key}` : basePath)}
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 10,
-                  padding: "10px 12px",
-                  borderRadius: 8,
-                  fontSize: 14,
-                  fontWeight: isActive ? 600 : 400,
-                  background: isActive ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
-                  color: isActive ? "var(--accent)" : "var(--text-muted)",
-                  transition: "background 0.15s, color 0.15s",
-                  textAlign: "left",
-                }}
-                onMouseEnter={(e) => {
-                  if (!isActive) e.currentTarget.style.background = "var(--bg-secondary)";
-                }}
-                onMouseLeave={(e) => {
-                  if (!isActive) e.currentTarget.style.background = "transparent";
-                }}
-              >
-                <Icon size={16} />
-                {item.label}
-              </button>
-            );
-          })}
-        </nav>
-
-        {/* Back buttons */}
-        <div style={{ padding: "12px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
+        {!isMobile && (
           <button
             onClick={() => navigate("/agents")}
             style={{
               display: "flex",
               alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 8,
-              fontSize: 13,
-              color: "var(--text-muted)",
+              gap: 6,
               background: "transparent",
+              border: "none",
+              color: "var(--text-muted)",
+              fontSize: 13,
+              cursor: "pointer",
+              padding: "6px 10px",
+              borderRadius: 8,
               transition: "background 0.15s",
+              flexShrink: 0,
             }}
             onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
             onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
           >
-            <ArrowLeft size={16} />
+            <ArrowLeft size={14} />
             All Agents
           </button>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
-              width: "100%",
-              padding: "10px 12px",
-              borderRadius: 8,
-              fontSize: 13,
-              color: "var(--text-muted)",
-              background: "transparent",
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
-          >
-            <MessageSquare size={16} />
-            Back to Chat
-          </button>
-        </div>
+        )}
+      </header>
+
+      {/* Tab bar */}
+      <div
+        style={{
+          display: "flex",
+          gap: 4,
+          padding: "8px 16px",
+          borderBottom: "1px solid var(--border)",
+          flexShrink: 0,
+          overflowX: "auto",
+        }}
+      >
+        {navItems.map((item) => {
+          const isActive = activeKey === item.key;
+          const Icon = item.icon;
+          return (
+            <button
+              key={item.key}
+              onClick={() => navigate(item.key ? `${basePath}/${item.key}` : basePath)}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "8px 16px",
+                borderRadius: 8,
+                border: "none",
+                fontSize: 13,
+                fontWeight: isActive ? 600 : 500,
+                background: isActive ? "color-mix(in srgb, var(--accent) 12%, transparent)" : "transparent",
+                color: isActive ? "var(--accent)" : "var(--text-muted)",
+                cursor: "pointer",
+                transition: "background 0.15s, color 0.15s",
+                whiteSpace: "nowrap",
+                flex: isMobile ? 1 : undefined,
+                justifyContent: isMobile ? "center" : undefined,
+              }}
+              onMouseEnter={(e) => {
+                if (!isActive) e.currentTarget.style.background = "var(--bg-secondary)";
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) e.currentTarget.style.background = "transparent";
+              }}
+            >
+              <Icon size={14} />
+              {item.label}
+            </button>
+          );
+        })}
       </div>
 
-      {/* Main content */}
-      <div style={{ flex: 1, overflow: "auto" }}>{renderSubPage()}</div>
+      {/* Content */}
+      <div style={{ flex: 1, overflow: "auto", padding: 16 }}>{renderSubPage()}</div>
     </div>
   );
 }
