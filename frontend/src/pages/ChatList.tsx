@@ -63,6 +63,7 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
   const location = useLocation();
   const isQueueActive = location.pathname === "/queue";
   const isSettingsActive = location.pathname === "/settings";
+  const isAgentsActive = location.pathname.startsWith("/agents");
 
   // Content search hook
   const { matchingChatIds, isSearching } = useChatSearch(searchQuery);
@@ -369,11 +370,11 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
           <button
             onClick={() => navigate("/agents")}
             style={{
-              background: "var(--bg-secondary)",
-              color: "var(--text)",
+              background: isAgentsActive ? "var(--accent)" : "var(--bg-secondary)",
+              color: isAgentsActive ? "#fff" : "var(--text)",
               padding: "10px",
               borderRadius: 8,
-              border: "1px solid var(--border)",
+              border: isAgentsActive ? "none" : "1px solid var(--border)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",

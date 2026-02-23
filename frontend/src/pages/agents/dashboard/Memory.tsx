@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { Save, FileText, Calendar, ChevronRight, Check } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getWorkspaceFiles, getWorkspaceFile, updateWorkspaceFile, getAgentMemory, getAgentDailyMemory } from "../../../api";
@@ -21,8 +21,7 @@ const FILE_DESCRIPTIONS: Record<string, string> = {
   "MEMORY.md": "Curated long-term memory — distilled from daily journals",
 };
 
-export default function Memory() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Memory({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
 
   const [files, setFiles] = useState<string[]>([]);
@@ -43,10 +42,7 @@ export default function Memory() {
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    Promise.all([
-      getWorkspaceFiles(agent.alias),
-      getAgentMemory(agent.alias),
-    ])
+    Promise.all([getWorkspaceFiles(agent.alias), getAgentMemory(agent.alias)])
       .then(([fileList, memoryInfo]) => {
         if (cancelled) return;
         const ordered = ["SOUL.md", "USER.md", "TOOLS.md", "HEARTBEAT.md", "MEMORY.md"];
@@ -61,8 +57,12 @@ export default function Memory() {
         setFiles([]);
         setDailyFiles([]);
       })
-      .finally(() => { if (!cancelled) setLoading(false); });
-    return () => { cancelled = true; };
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
   }, [agent.alias]);
 
   // Load selected file content
@@ -123,9 +123,7 @@ export default function Memory() {
       {/* Header */}
       <div style={{ marginBottom: 20 }}>
         <h1 style={{ fontSize: 20, fontWeight: 700 }}>Memory & Workspace</h1>
-        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>
-          Edit workspace files and view agent memory
-        </p>
+        <p style={{ fontSize: 13, color: "var(--text-muted)", marginTop: 2 }}>Edit workspace files and view agent memory</p>
       </div>
 
       <div style={{ display: "flex", gap: 20, flexDirection: isMobile ? "column" : "row" }}>
@@ -252,9 +250,7 @@ export default function Memory() {
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>
-                    {selectedDate.replace(".md", "")}
-                  </h3>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>{selectedDate.replace(".md", "")}</h3>
                   <p style={{ fontSize: 12, color: "var(--text-muted)" }}>Daily journal (read-only)</p>
                 </div>
               </div>
@@ -279,12 +275,8 @@ export default function Memory() {
             <>
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 12 }}>
                 <div>
-                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>
-                    {selectedFile}
-                  </h3>
-                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>
-                    {FILE_DESCRIPTIONS[selectedFile] || ""}
-                  </p>
+                  <h3 style={{ fontSize: 15, fontWeight: 600, fontFamily: "monospace" }}>{selectedFile}</h3>
+                  <p style={{ fontSize: 12, color: "var(--text-muted)" }}>{FILE_DESCRIPTIONS[selectedFile] || ""}</p>
                 </div>
                 <button
                   onClick={handleSave}
@@ -327,16 +319,10 @@ export default function Memory() {
                 }}
                 placeholder={`Edit ${selectedFile}...`}
               />
-              {hasChanges && (
-                <p style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}>
-                  Unsaved changes. Press Ctrl+S or click Save.
-                </p>
-              )}
+              {hasChanges && <p style={{ fontSize: 12, color: "var(--warning)", marginTop: 6 }}>Unsaved changes. Press Ctrl+S or click Save.</p>}
             </>
           ) : (
-            <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>
-              Select a file to edit.
-            </div>
+            <div style={{ textAlign: "center", padding: "48px 20px", color: "var(--text-muted)", fontSize: 14 }}>Select a file to edit.</div>
           )}
         </div>
       </div>

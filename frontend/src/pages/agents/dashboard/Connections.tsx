@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { Wifi, WifiOff, ExternalLink, Info, Loader2, AlertTriangle } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getProxyRoutes } from "../../../api";
@@ -8,8 +8,7 @@ import type { ProxyRoute, AgentConfig } from "../../../api";
 // Connections are managed by mcp-secure-proxy, not by claude-code-ui.
 // This page fetches live route data from the proxy via GET /api/proxy/routes.
 
-export default function Connections() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Connections({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
   const [routes, setRoutes] = useState<ProxyRoute[]>([]);
   const [configured, setConfigured] = useState(true);

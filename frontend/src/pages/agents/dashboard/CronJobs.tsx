@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { Plus, Play, Pause, CheckCircle, Clock, RotateCcw, Calendar, Trash2, X } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getAgentCronJobs, createAgentCronJob, updateAgentCronJob, deleteAgentCronJob } from "../../../api";
@@ -179,8 +179,7 @@ const typeConfig: Record<string, { color: string; icon: typeof Clock }> = {
   indefinite: { color: "var(--warning)", icon: Clock },
 };
 
-export default function CronJobs() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function CronJobs({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
   const [jobs, setJobs] = useState<CronJob[]>([]);
   const [loading, setLoading] = useState(true);

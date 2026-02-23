@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOutletContext, useNavigate } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MessageSquare, Plug, Clock, Radio, ChevronRight, Bot, Save, Check } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { updateAgent, getAgentCronJobs, getAgentActivity, getProxyIngestors, getKeyAliases } from "../../../api";
@@ -25,8 +25,7 @@ const typeColors: Record<string, string> = {
   trigger: "#a78bfa",
 };
 
-export default function Overview() {
-  const { agent, onAgentUpdate } = useOutletContext<{ agent: AgentConfig; onAgentUpdate?: (agent: AgentConfig) => void }>();
+export default function Overview({ agent, onAgentUpdate }: { agent: AgentConfig; onAgentUpdate?: (agent: AgentConfig) => void }) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
 

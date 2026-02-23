@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { Radio, Loader2, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getProxyEvents, getProxyIngestors } from "../../../api";
@@ -37,8 +37,7 @@ function stateColor(state: string): string {
   }
 }
 
-export default function Events() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Events({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
   const [events, setEvents] = useState<StoredEvent[]>([]);
   const [sources, setSources] = useState<string[]>([]);

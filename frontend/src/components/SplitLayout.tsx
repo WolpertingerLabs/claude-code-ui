@@ -5,6 +5,9 @@ import ChatList from "../pages/ChatList";
 import Chat from "../pages/Chat";
 import Queue from "../pages/Queue";
 import Settings from "../pages/Settings";
+import AgentList from "../pages/agents/AgentList";
+import CreateAgent from "../pages/agents/CreateAgent";
+import AgentDashboard from "../pages/agents/AgentDashboard";
 
 interface SplitLayoutProps {
   onLogout: () => void;
@@ -28,6 +31,12 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
   const chatMatch = !isNewChat && location.pathname.match(/^\/chat\/(.+)$/);
   const activeChatId = chatMatch ? chatMatch[1] : null;
 
+  // Check if we're on agent pages
+  const isAgentList = location.pathname === "/agents";
+  const isCreateAgent = location.pathname === "/agents/new";
+  // Match /agents/:alias (but not /agents or /agents/new)
+  const isAgentDashboard = !isAgentList && !isCreateAgent && /^\/agents\/[^/]+/.test(location.pathname);
+
   const refreshChatList = () => {
     chatListRefreshRef.current?.();
   };
@@ -39,6 +48,15 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
     }
     if (isQueue) {
       return <Queue />;
+    }
+    if (isAgentList) {
+      return <AgentList />;
+    }
+    if (isCreateAgent) {
+      return <CreateAgent />;
+    }
+    if (isAgentDashboard) {
+      return <AgentDashboard />;
     }
     if (isNewChat) {
       return <Chat onChatListRefresh={refreshChatList} />;
@@ -85,7 +103,7 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
         />
       </div>
 
-      {/* Active Chat Area - 3/4 of width */}
+      {/* Main Content Area - 3/4 of width */}
       <div
         className="split-main"
         style={{
@@ -99,6 +117,12 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
           <Settings onLogout={onLogout} />
         ) : isQueue ? (
           <Queue />
+        ) : isAgentList ? (
+          <AgentList />
+        ) : isCreateAgent ? (
+          <CreateAgent />
+        ) : isAgentDashboard ? (
+          <AgentDashboard />
         ) : isNewChat ? (
           <Chat onChatListRefresh={refreshChatList} />
         ) : activeChatId ? (
