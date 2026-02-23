@@ -23,9 +23,7 @@ import { loginHandler, logoutHandler, checkAuthHandler, requireAuth } from "./au
 import { existsSync, readFileSync } from "fs";
 import { createLogger } from "./utils/logger.js";
 import { initScheduler, shutdownScheduler } from "./services/cron-scheduler.js";
-import { initHeartbeats, shutdownHeartbeats } from "./services/heartbeat.js";
 import { initEventWatchers, shutdownEventWatchers } from "./services/event-watcher.js";
-import { initMemoryConsolidation, shutdownConsolidation } from "./services/memory-consolidation.js";
 import { LocalProxy } from "./services/local-proxy.js";
 import { getAgentSettings, getActiveMcpConfigDir } from "./services/agent-settings.js";
 import { setLocalProxyInstance, getLocalProxyInstance } from "./services/proxy-singleton.js";
@@ -148,19 +146,9 @@ app.listen(PORT, () => {
     log.error(`Scheduler init failed: ${err.message}`);
   }
   try {
-    initHeartbeats();
-  } catch (err: any) {
-    log.error(`Heartbeat init failed: ${err.message}`);
-  }
-  try {
     initEventWatchers();
   } catch (err: any) {
     log.error(`Event watcher init failed: ${err.message}`);
-  }
-  try {
-    initMemoryConsolidation();
-  } catch (err: any) {
-    log.error(`Memory consolidation init failed: ${err.message}`);
   }
 
   // Start local proxy if configured
@@ -192,9 +180,7 @@ app.listen(PORT, () => {
 async function gracefulShutdown(signal: string) {
   log.info(`${signal} received, shutting down gracefully`);
   shutdownScheduler();
-  shutdownHeartbeats();
   shutdownEventWatchers();
-  shutdownConsolidation();
 
   const localProxy = getLocalProxyInstance();
   if (localProxy) {

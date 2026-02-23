@@ -23,8 +23,6 @@ import { scheduleJob, cancelJob } from "./cron-scheduler.js";
 import { listTriggers, getTrigger, createTrigger, updateTrigger, deleteTrigger } from "./agent-triggers.js";
 import { getActivity, appendActivity } from "./agent-activity.js";
 import { getActiveSession } from "./claude.js";
-import { updateHeartbeatConfig } from "./heartbeat.js";
-import { updateConsolidationConfig } from "./memory-consolidation.js";
 import { findSessionLogPath } from "../utils/session-log.js";
 import { findChat } from "../utils/chat-lookup.js";
 import { createLogger } from "../utils/logger.js";
@@ -957,23 +955,6 @@ export function buildAgentToolsServer(agentAlias: string) {
           userTimezone: z.string().optional().describe("User's timezone (e.g. 'America/New_York')"),
           userLocation: z.string().optional().describe("User's location"),
           userContext: z.string().optional().describe("Additional context about the user"),
-          heartbeat: z
-            .object({
-              enabled: z.boolean().describe("Whether heartbeat is enabled"),
-              intervalMinutes: z.number().describe("Minutes between heartbeats (default: 30)"),
-              quietHoursStart: z.string().optional().describe("Start of quiet hours in HH:MM format (e.g. '23:00')"),
-              quietHoursEnd: z.string().optional().describe("End of quiet hours in HH:MM format (e.g. '07:00')"),
-            })
-            .optional()
-            .describe("Heartbeat configuration — periodic open-ended check-ins"),
-          memoryConsolidation: z
-            .object({
-              enabled: z.boolean().describe("Whether daily memory consolidation is enabled"),
-              timeOfDay: z.string().describe("Time to run daily in HH:MM format (e.g. '03:00')"),
-              retentionDays: z.number().describe("How many days of journals to review (default: 14)"),
-            })
-            .optional()
-            .describe("Memory consolidation configuration — daily distillation of journal entries"),
           mcpKeyAlias: z.string().optional().describe("MCP secure proxy key alias for this agent"),
         },
         async (args) => {
@@ -1001,8 +982,6 @@ export function buildAgentToolsServer(agentAlias: string) {
               ...(args.userTimezone !== undefined && { userTimezone: args.userTimezone?.trim() || undefined }),
               ...(args.userLocation !== undefined && { userLocation: args.userLocation?.trim() || undefined }),
               ...(args.userContext !== undefined && { userContext: args.userContext?.trim() || undefined }),
-              ...(args.heartbeat !== undefined && { heartbeat: args.heartbeat }),
-              ...(args.memoryConsolidation !== undefined && { memoryConsolidation: args.memoryConsolidation }),
               ...(args.mcpKeyAlias !== undefined && { mcpKeyAlias: args.mcpKeyAlias }),
             };
 
@@ -1017,16 +996,6 @@ export function buildAgentToolsServer(agentAlias: string) {
 
             // Persist (createAgent acts as upsert)
             createAgent(updated);
-
-            // Sync heartbeat system if heartbeat config changed
-            if (args.heartbeat !== undefined) {
-              updateHeartbeatConfig(args.alias, args.heartbeat || { enabled: false, intervalMinutes: 30 });
-            }
-
-            // Sync memory consolidation system if config changed
-            if (args.memoryConsolidation !== undefined) {
-              updateConsolidationConfig(args.alias, args.memoryConsolidation || { enabled: false, timeOfDay: "03:00", retentionDays: 14 });
-            }
 
             const workspacePath = ensureAgentWorkspaceDir(args.alias);
 

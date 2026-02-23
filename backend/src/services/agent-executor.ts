@@ -1,7 +1,7 @@
 /**
  * Shared agent execution helper.
  *
- * Central function used by the cron scheduler, heartbeat system, and event watcher
+ * Central function used by the cron scheduler and event watcher
  * to start agent sessions without duplicating session-launch logic.
  *
  * Uses the same lazy setMessageSender pattern as agent-tools.ts to break the
@@ -50,7 +50,7 @@ function getSendMessage(): MessageSender {
 export interface ExecuteAgentOptions {
   agentAlias: string;
   prompt: string;
-  triggeredBy: "cron" | "heartbeat" | "event" | "trigger" | "consolidation" | "tool";
+  triggeredBy: "cron" | "event" | "trigger" | "tool";
   metadata?: Record<string, unknown>;
   maxTurns?: number;
 }
@@ -123,7 +123,7 @@ export async function executeAgent(opts: ExecuteAgentOptions): Promise<ExecuteAg
     log.info(`[${triggeredBy}] Started session ${chatId} for agent ${agentAlias}`);
 
     // Log activity
-    const activityType: ActivityEntry["type"] = triggeredBy === "heartbeat" || triggeredBy === "tool" ? "system" : triggeredBy;
+    const activityType: ActivityEntry["type"] = triggeredBy === "tool" ? "system" : triggeredBy;
     appendActivity(agentAlias, {
       type: activityType,
       message: `${triggeredBy} session started`,
@@ -131,7 +131,6 @@ export async function executeAgent(opts: ExecuteAgentOptions): Promise<ExecuteAg
         chatId,
         triggeredBy,
         ...metadata,
-        ...(triggeredBy === "heartbeat" && { subtype: "heartbeat" }),
       },
     });
 

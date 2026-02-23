@@ -39,13 +39,6 @@ export default function Overview({ agent, onAgentUpdate }: { agent: AgentConfig;
   const [userTimezone, setUserTimezone] = useState(agent.userTimezone || "");
   const [userLocation, setUserLocation] = useState(agent.userLocation || "");
   const [userContext, setUserContext] = useState(agent.userContext || "");
-  const [heartbeatEnabled, setHeartbeatEnabled] = useState(agent.heartbeat?.enabled || false);
-  const [heartbeatInterval, setHeartbeatInterval] = useState(agent.heartbeat?.intervalMinutes || 30);
-  const [quietStart, setQuietStart] = useState(agent.heartbeat?.quietHoursStart || "");
-  const [quietEnd, setQuietEnd] = useState(agent.heartbeat?.quietHoursEnd || "");
-  const [consolidationEnabled, setConsolidationEnabled] = useState(agent.memoryConsolidation?.enabled || false);
-  const [consolidationTime, setConsolidationTime] = useState(agent.memoryConsolidation?.timeOfDay || "03:00");
-  const [consolidationRetention, setConsolidationRetention] = useState(agent.memoryConsolidation?.retentionDays || 14);
   const [selectedKeyAlias, setSelectedKeyAlias] = useState<string | undefined>(agent.mcpKeyAlias);
   const [availableKeys, setAvailableKeys] = useState<KeyAliasInfo[]>([]);
   const [saving, setSaving] = useState(false);
@@ -106,17 +99,6 @@ export default function Overview({ agent, onAgentUpdate }: { agent: AgentConfig;
         userTimezone: userTimezone || undefined,
         userLocation: userLocation || undefined,
         userContext: userContext || undefined,
-        heartbeat: {
-          enabled: heartbeatEnabled,
-          intervalMinutes: heartbeatInterval,
-          quietHoursStart: quietStart || undefined,
-          quietHoursEnd: quietEnd || undefined,
-        },
-        memoryConsolidation: {
-          enabled: consolidationEnabled,
-          timeOfDay: consolidationTime,
-          retentionDays: consolidationRetention,
-        },
         mcpKeyAlias: selectedKeyAlias || undefined,
       });
       onAgentUpdate?.(updated);
@@ -321,120 +303,6 @@ export default function Overview({ agent, onAgentUpdate }: { agent: AgentConfig;
               placeholder="Anything else the agent should know about you..."
               rows={2}
               style={{ ...inputStyle, resize: "vertical" }}
-            />
-          </div>
-
-          {/* Heartbeat section */}
-          <div style={{ gridColumn: isMobile ? undefined : "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
-              Heartbeat
-            </p>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
-              Periodic check-ins where the agent reads HEARTBEAT.md and decides what to do.
-            </p>
-          </div>
-          <div>
-            <label style={labelStyle}>Enabled</label>
-            <button
-              type="button"
-              onClick={() => setHeartbeatEnabled(!heartbeatEnabled)}
-              style={{
-                padding: "8px 18px",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                background: heartbeatEnabled ? "var(--success)" : "var(--bg)",
-                color: heartbeatEnabled ? "#fff" : "var(--text-muted)",
-                border: heartbeatEnabled ? "1px solid var(--success)" : "1px solid var(--border)",
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
-              {heartbeatEnabled ? "On" : "Off"}
-            </button>
-          </div>
-          <div>
-            <label style={labelStyle}>Interval (minutes)</label>
-            <input
-              type="number"
-              value={heartbeatInterval}
-              onChange={(e) => setHeartbeatInterval(parseInt(e.target.value) || 30)}
-              min={5}
-              max={1440}
-              disabled={!heartbeatEnabled}
-              style={{ ...inputStyle, opacity: heartbeatEnabled ? 1 : 0.5 }}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Quiet Hours Start</label>
-            <input
-              type="time"
-              value={quietStart}
-              onChange={(e) => setQuietStart(e.target.value)}
-              disabled={!heartbeatEnabled}
-              style={{ ...inputStyle, opacity: heartbeatEnabled ? 1 : 0.5 }}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Quiet Hours End</label>
-            <input
-              type="time"
-              value={quietEnd}
-              onChange={(e) => setQuietEnd(e.target.value)}
-              disabled={!heartbeatEnabled}
-              style={{ ...inputStyle, opacity: heartbeatEnabled ? 1 : 0.5 }}
-            />
-          </div>
-
-          {/* Memory Consolidation section */}
-          <div style={{ gridColumn: isMobile ? undefined : "1 / -1", borderTop: "1px solid var(--border)", paddingTop: 14, marginTop: 4 }}>
-            <p style={{ fontSize: 12, fontWeight: 600, color: "var(--text-muted)", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: 10 }}>
-              Memory Consolidation
-            </p>
-            <p style={{ fontSize: 12, color: "var(--text-muted)", marginBottom: 12, lineHeight: 1.5 }}>
-              Daily review of journal entries. The agent distills insights into MEMORY.md and updates SOUL.md, USER.md, and TOOLS.md as needed.
-            </p>
-          </div>
-          <div>
-            <label style={labelStyle}>Enabled</label>
-            <button
-              type="button"
-              onClick={() => setConsolidationEnabled(!consolidationEnabled)}
-              style={{
-                padding: "8px 18px",
-                borderRadius: 6,
-                fontSize: 13,
-                fontWeight: 500,
-                background: consolidationEnabled ? "var(--success)" : "var(--bg)",
-                color: consolidationEnabled ? "#fff" : "var(--text-muted)",
-                border: consolidationEnabled ? "1px solid var(--success)" : "1px solid var(--border)",
-                cursor: "pointer",
-                transition: "all 0.15s",
-              }}
-            >
-              {consolidationEnabled ? "On" : "Off"}
-            </button>
-          </div>
-          <div>
-            <label style={labelStyle}>Time of Day</label>
-            <input
-              type="time"
-              value={consolidationTime}
-              onChange={(e) => setConsolidationTime(e.target.value)}
-              disabled={!consolidationEnabled}
-              style={{ ...inputStyle, opacity: consolidationEnabled ? 1 : 0.5 }}
-            />
-          </div>
-          <div>
-            <label style={labelStyle}>Review Window (days)</label>
-            <input
-              type="number"
-              value={consolidationRetention}
-              onChange={(e) => setConsolidationRetention(parseInt(e.target.value) || 14)}
-              min={3}
-              max={365}
-              disabled={!consolidationEnabled}
-              style={{ ...inputStyle, opacity: consolidationEnabled ? 1 : 0.5 }}
             />
           </div>
 

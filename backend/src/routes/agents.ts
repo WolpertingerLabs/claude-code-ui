@@ -18,8 +18,6 @@ import { agentMemoryRouter } from "./agent-memory.js";
 import { agentCronJobsRouter } from "./agent-cron-jobs.js";
 import { agentActivityRouter } from "./agent-activity.js";
 import { agentTriggersRouter } from "./agent-triggers.js";
-import { updateHeartbeatConfig, stopHeartbeat } from "../services/heartbeat.js";
-import { updateConsolidationConfig, stopConsolidation } from "../services/memory-consolidation.js";
 import { cancelAllJobsForAgent, scheduleJob } from "../services/cron-scheduler.js";
 import { ensureDefaultCronJobs } from "../services/agent-cron-jobs.js";
 
@@ -162,8 +160,6 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     userLocation,
     userContext,
     eventSubscriptions,
-    heartbeat,
-    memoryConsolidation,
     mcpKeyAlias,
   } = req.body as Partial<AgentConfig>;
 
@@ -185,8 +181,6 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
     ...(userLocation !== undefined && { userLocation: userLocation?.trim() || undefined }),
     ...(userContext !== undefined && { userContext: userContext?.trim() || undefined }),
     ...(eventSubscriptions !== undefined && { eventSubscriptions }),
-    ...(heartbeat !== undefined && { heartbeat }),
-    ...(memoryConsolidation !== undefined && { memoryConsolidation }),
     ...(mcpKeyAlias !== undefined && { mcpKeyAlias }),
   };
 
@@ -204,16 +198,6 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
   // Persist (createAgent acts as upsert — mkdirSync with recursive is a no-op)
   createAgent(updated);
 
-  // Sync heartbeat system if heartbeat config changed
-  if (heartbeat !== undefined) {
-    updateHeartbeatConfig(alias, heartbeat || { enabled: false, intervalMinutes: 30 });
-  }
-
-  // Sync memory consolidation system if config changed
-  if (memoryConsolidation !== undefined) {
-    updateConsolidationConfig(alias, memoryConsolidation || { enabled: false, timeOfDay: "03:00", retentionDays: 14 });
-  }
-
   const workspacePath = ensureAgentWorkspaceDir(alias);
   res.json({ agent: { ...updated, workspacePath, serverTimezone: SERVER_TIMEZONE } });
 });
@@ -221,9 +205,7 @@ agentsRouter.put("/:alias", (req: Request, res: Response): void => {
 agentsRouter.delete("/:alias", (req: Request, res: Response): void => {
   const alias = req.params.alias as string;
 
-  // Stop heartbeat, consolidation, and cancel all cron jobs before deleting
-  stopHeartbeat(alias);
-  stopConsolidation(alias);
+  // Cancel all cron jobs before deleting
   cancelAllJobsForAgent(alias);
 
   const deleted = deleteAgent(alias);
