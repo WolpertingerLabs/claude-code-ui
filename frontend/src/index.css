@@ -36,34 +36,32 @@
   --builtin-text: #bfdbfe;
 }
 
-/* Light mode overrides */
-@media (prefers-color-scheme: light) {
-  :root {
-    --bg: #ffffff;
-    --surface: #f8fafc;
-    --border: #e2e8f0;
-    --text: #1e293b;
-    --text-muted: #64748b;
-    --accent: #7c6aef;
-    --accent-hover: #9484f0;
-    --user-bg: #e0e7ff;
-    --assistant-bg: #f8fafc;
-    --code-bg: #f1f5f9;
-    --danger: #ef4444;
-    --error: #cf222e;
-    --success: #16a34a;
-    --warning: #ca8a04;
-    --bg-secondary: #f0f4f8;
-    --text-secondary: #64748b;
-    --border-light: #e2e8f0;
+/* Light mode overrides (applied via data-theme attribute on <html>) */
+[data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f8fafc;
+  --border: #e2e8f0;
+  --text: #1e293b;
+  --text-muted: #64748b;
+  --accent: #7c6aef;
+  --accent-hover: #9484f0;
+  --user-bg: #e0e7ff;
+  --assistant-bg: #f8fafc;
+  --code-bg: #f1f5f9;
+  --danger: #ef4444;
+  --error: #cf222e;
+  --success: #16a34a;
+  --warning: #ca8a04;
+  --bg-secondary: #f0f4f8;
+  --text-secondary: #64748b;
+  --border-light: #e2e8f0;
 
-    /* Built-in command colors - optimized for light mode */
-    --builtin-user-bg: #dbeafe;
-    --builtin-user-border: #3b82f6;
-    --builtin-assistant-bg: #eff6ff;
-    --builtin-assistant-border: #3b82f6;
-    --builtin-text: #1e40af;
-  }
+  /* Built-in command colors - optimized for light mode */
+  --builtin-user-bg: #dbeafe;
+  --builtin-user-border: #3b82f6;
+  --builtin-assistant-bg: #eff6ff;
+  --builtin-assistant-border: #3b82f6;
+  --builtin-text: #1e40af;
 }
 
 html,
@@ -375,46 +373,44 @@ pre {
 }
 
 /* Light mode overrides for diff */
-@media (prefers-color-scheme: light) {
-  .diff-line-added {
-    background: rgba(46, 160, 67, 0.12);
-    border-left-color: #1a7f37;
-  }
+[data-theme="light"] .diff-line-added {
+  background: rgba(46, 160, 67, 0.12);
+  border-left-color: #1a7f37;
+}
 
-  .diff-line-added .diff-line-number {
-    background: rgba(46, 160, 67, 0.08);
-    color: #1a7f37;
-  }
+[data-theme="light"] .diff-line-added .diff-line-number {
+  background: rgba(46, 160, 67, 0.08);
+  color: #1a7f37;
+}
 
-  .diff-line-added .diff-line-prefix {
-    color: #1a7f37;
-  }
+[data-theme="light"] .diff-line-added .diff-line-prefix {
+  color: #1a7f37;
+}
 
-  .diff-line-removed {
-    background: rgba(248, 81, 73, 0.12);
-    border-left-color: #cf222e;
-  }
+[data-theme="light"] .diff-line-removed {
+  background: rgba(248, 81, 73, 0.12);
+  border-left-color: #cf222e;
+}
 
-  .diff-line-removed .diff-line-number {
-    background: rgba(248, 81, 73, 0.08);
-    color: #cf222e;
-  }
+[data-theme="light"] .diff-line-removed .diff-line-number {
+  background: rgba(248, 81, 73, 0.08);
+  color: #cf222e;
+}
 
-  .diff-line-removed .diff-line-prefix {
-    color: #cf222e;
-  }
+[data-theme="light"] .diff-line-removed .diff-line-prefix {
+  color: #cf222e;
+}
 
-  .diff-stat-added {
-    color: #1a7f37;
-  }
+[data-theme="light"] .diff-stat-added {
+  color: #1a7f37;
+}
 
-  .diff-stat-removed {
-    color: #cf222e;
-  }
+[data-theme="light"] .diff-stat-removed {
+  color: #cf222e;
+}
 
-  .diff-line-hunk {
-    background: rgba(124, 106, 239, 0.06);
-  }
+[data-theme="light"] .diff-line-hunk {
+  background: rgba(124, 106, 239, 0.06);
 }
 
 /* Fix native <option> elements being unreadable in dark mode */

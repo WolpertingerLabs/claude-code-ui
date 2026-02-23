@@ -1,10 +1,30 @@
 import { useState, useEffect, useCallback } from "react";
 import { useNavigate } from "react-router-dom";
-import { ChevronLeft, ChevronDown, ChevronRight, LogOut, FolderSearch, RefreshCw, Trash2, Plug, Server, Plus, Loader2, Eye, EyeOff, Save, AlertTriangle } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronDown,
+  ChevronRight,
+  LogOut,
+  FolderSearch,
+  RefreshCw,
+  Trash2,
+  Plug,
+  Server,
+  Plus,
+  Loader2,
+  Eye,
+  EyeOff,
+  Save,
+  AlertTriangle,
+  Sun,
+  Moon,
+  Monitor,
+} from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import ConfirmModal from "../components/ConfirmModal";
 import FolderBrowser from "../components/FolderBrowser";
-import { getMaxTurns, saveMaxTurns } from "../utils/localStorage";
+import { getMaxTurns, saveMaxTurns, getThemeMode, saveThemeMode } from "../utils/localStorage";
+import type { ThemeMode } from "../utils/localStorage";
 import {
   getAppPlugins,
   scanForPlugins,
@@ -28,6 +48,13 @@ export default function Settings({ onLogout }: SettingsProps) {
   const [maxTurns, setMaxTurns] = useState(() => getMaxTurns());
   const [saved, setSaved] = useState(false);
   const [logoutConfirmOpen, setLogoutConfirmOpen] = useState(false);
+  const [themeMode, setThemeMode] = useState<ThemeMode>(() => getThemeMode());
+
+  const handleThemeChange = (mode: ThemeMode) => {
+    setThemeMode(mode);
+    saveThemeMode(mode);
+    window.dispatchEvent(new Event("theme-change"));
+  };
 
   // App-wide plugins state
   const [appPluginsData, setAppPluginsData] = useState<AppPluginsData | null>(null);
@@ -231,10 +258,7 @@ export default function Settings({ onLogout }: SettingsProps) {
   };
 
   const hasEnvVars = (server: McpServerConfig): boolean => {
-    return !!(
-      (server.env && Object.keys(server.env).length > 0) ||
-      (server.envDefaults && Object.keys(server.envDefaults).length > 0)
-    );
+    return !!((server.env && Object.keys(server.env).length > 0) || (server.envDefaults && Object.keys(server.envDefaults).length > 0));
   };
 
   /** Check if value is a ${ENV_VAR} reference for native env pass-through */
@@ -286,6 +310,69 @@ export default function Settings({ onLogout }: SettingsProps) {
 
       {/* Content */}
       <div style={{ flex: 1, overflow: "auto", padding: 16 }}>
+        {/* Appearance Section */}
+        <div
+          style={{
+            border: "1px solid var(--border)",
+            borderRadius: 8,
+            padding: 20,
+            background: "var(--bg)",
+            marginBottom: 16,
+          }}
+        >
+          <div style={{ marginBottom: 6, display: "flex", alignItems: "center", gap: 8 }}>
+            {themeMode === "light" ? <Sun size={16} style={{ color: "var(--accent)" }} /> : <Moon size={16} style={{ color: "var(--accent)" }} />}
+            <span style={{ fontSize: 14, fontWeight: 600, color: "var(--text)" }}>Appearance</span>
+          </div>
+          <div
+            style={{
+              fontSize: 12,
+              color: "var(--text-muted)",
+              marginBottom: 12,
+            }}
+          >
+            Choose your preferred color theme.
+          </div>
+          <div
+            style={{
+              display: "flex",
+              borderRadius: 8,
+              border: "1px solid var(--border)",
+              overflow: "hidden",
+            }}
+          >
+            {[
+              { mode: "light" as ThemeMode, label: "Light", icon: <Sun size={14} /> },
+              { mode: "dark" as ThemeMode, label: "Dark", icon: <Moon size={14} /> },
+              { mode: "system" as ThemeMode, label: "System", icon: <Monitor size={14} /> },
+            ].map(({ mode, label, icon }, idx) => (
+              <button
+                key={mode}
+                onClick={() => handleThemeChange(mode)}
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  gap: 6,
+                  padding: "10px 12px",
+                  fontSize: 13,
+                  fontWeight: 500,
+                  cursor: "pointer",
+                  border: "none",
+                  borderRight: idx < 2 ? "1px solid var(--border)" : "none",
+                  background: themeMode === mode ? "var(--accent)" : "var(--surface)",
+                  color: themeMode === mode ? "#fff" : "var(--text)",
+                  transition: "background 0.15s, color 0.15s",
+                }}
+              >
+                {icon}
+                {label}
+              </button>
+            ))}
+          </div>
+        </div>
+
         {/* Max Iterations Section */}
         <div
           style={{

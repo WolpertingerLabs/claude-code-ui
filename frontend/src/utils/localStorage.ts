@@ -10,12 +10,15 @@ interface RecentDirectory {
   lastUsed: string;
 }
 
+export type ThemeMode = "light" | "dark" | "system";
+
 interface LocalStorageData {
   defaultPermissions?: DefaultPermissions;
   recentDirectories?: RecentDirectory[];
   maxTurns?: number;
   useWorktree?: boolean;
   showTriggeredChats?: boolean;
+  themeMode?: ThemeMode;
 }
 
 /** Check if a path is inside the ccui-agents workspace directory (excluded from recommended folders). */
@@ -120,6 +123,17 @@ export function getShowTriggeredChats(): boolean {
 export function saveShowTriggeredChats(value: boolean): void {
   const data = getStorageData();
   data.showTriggeredChats = value;
+  setStorageData(data);
+}
+
+export function getThemeMode(): ThemeMode {
+  const data = getStorageData();
+  return data.themeMode ?? "system";
+}
+
+export function saveThemeMode(mode: ThemeMode): void {
+  const data = getStorageData();
+  data.themeMode = mode;
   setStorageData(data);
 }
 
