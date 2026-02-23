@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from "react";
-import { useNavigate, useOutletContext } from "react-router-dom";
+import { useNavigate } from "react-router-dom";
 import { MessageSquare, Plus, Bot, ExternalLink } from "lucide-react";
 import { listChats, getAgentIdentityPrompt, type Chat as ChatType } from "../../../api";
 import { useIsMobile } from "../../../hooks/useIsMobile";
@@ -14,8 +14,7 @@ function formatTime(dateStr: string): string {
   return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} ${time}`;
 }
 
-export default function Chat() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Chat({ agent }: { agent: AgentConfig }) {
   const navigate = useNavigate();
   const isMobile = useIsMobile();
   const [conversations, setConversations] = useState<ChatType[]>([]);

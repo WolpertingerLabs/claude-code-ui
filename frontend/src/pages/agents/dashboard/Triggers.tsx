@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { Plus, Zap, Play, Pause, Trash2, X, Search, ChevronDown, ChevronRight, Info, Pencil } from "lucide-react";
 import ModalOverlay from "../../../components/ModalOverlay";
 import { useIsMobile } from "../../../hooks/useIsMobile";
@@ -22,8 +22,7 @@ const statusConfig: Record<string, { color: string; icon: typeof Play; label: st
   paused: { color: "var(--warning)", icon: Pause, label: "Paused" },
 };
 
-export default function Triggers() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Triggers({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
   const [triggers, setTriggers] = useState<Trigger[]>([]);
   const [loading, setLoading] = useState(true);

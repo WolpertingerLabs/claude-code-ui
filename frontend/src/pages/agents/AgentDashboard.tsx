@@ -1,9 +1,19 @@
 import { useState, useEffect } from "react";
-import { Outlet, useParams, useNavigate, useLocation } from "react-router-dom";
+import { useParams, useNavigate, useLocation } from "react-router-dom";
 import { ArrowLeft, LayoutDashboard, MessageSquare, Clock, Zap, Plug, Radio, Activity, Brain, Bot } from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { getAgent as fetchAgent } from "../../api";
 import type { AgentConfig } from "shared";
+
+// Dashboard sub-pages
+import Overview from "./dashboard/Overview";
+import AgentChat from "./dashboard/Chat";
+import CronJobs from "./dashboard/CronJobs";
+import Triggers from "./dashboard/Triggers";
+import Connections from "./dashboard/Connections";
+import Events from "./dashboard/Events";
+import AgentActivity from "./dashboard/Activity";
+import Memory from "./dashboard/Memory";
 
 const navItems = [
   { key: "", label: "Overview", icon: LayoutDashboard },
@@ -36,6 +46,29 @@ export default function AgentDashboard() {
   const basePath = `/agents/${alias}`;
   const subPath = location.pathname.replace(basePath, "").replace(/^\//, "");
   const activeKey = navItems.find((n) => n.key === subPath)?.key ?? "";
+
+  // Render the active sub-page based on URL path
+  const renderSubPage = () => {
+    if (!agent) return null;
+    switch (subPath) {
+      case "chat":
+        return <AgentChat agent={agent} />;
+      case "cron":
+        return <CronJobs agent={agent} />;
+      case "triggers":
+        return <Triggers agent={agent} />;
+      case "connections":
+        return <Connections agent={agent} />;
+      case "events":
+        return <Events agent={agent} />;
+      case "activity":
+        return <AgentActivity agent={agent} />;
+      case "memory":
+        return <Memory agent={agent} />;
+      default:
+        return <Overview agent={agent} onAgentUpdate={setAgent} />;
+    }
+  };
 
   if (loading) return null;
 
@@ -131,9 +164,7 @@ export default function AgentDashboard() {
         </div>
 
         {/* Content area */}
-        <div style={{ flex: 1, overflow: "auto" }}>
-          <Outlet context={{ agent, onAgentUpdate: setAgent }} />
-        </div>
+        <div style={{ flex: 1, overflow: "auto" }}>{renderSubPage()}</div>
 
         {/* Mobile bottom tab bar */}
         <div
@@ -257,8 +288,8 @@ export default function AgentDashboard() {
           })}
         </nav>
 
-        {/* Back button */}
-        <div style={{ padding: "12px", borderTop: "1px solid var(--border)" }}>
+        {/* Back buttons */}
+        <div style={{ padding: "12px", borderTop: "1px solid var(--border)", display: "flex", flexDirection: "column", gap: 4 }}>
           <button
             onClick={() => navigate("/agents")}
             style={{
@@ -279,13 +310,31 @@ export default function AgentDashboard() {
             <ArrowLeft size={16} />
             All Agents
           </button>
+          <button
+            onClick={() => navigate("/")}
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 8,
+              width: "100%",
+              padding: "10px 12px",
+              borderRadius: 8,
+              fontSize: 13,
+              color: "var(--text-muted)",
+              background: "transparent",
+              transition: "background 0.15s",
+            }}
+            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--bg-secondary)")}
+            onMouseLeave={(e) => (e.currentTarget.style.background = "transparent")}
+          >
+            <MessageSquare size={16} />
+            Back to Chat
+          </button>
         </div>
       </div>
 
       {/* Main content */}
-      <div style={{ flex: 1, overflow: "auto" }}>
-        <Outlet context={{ agent }} />
-      </div>
+      <div style={{ flex: 1, overflow: "auto" }}>{renderSubPage()}</div>
     </div>
   );
 }

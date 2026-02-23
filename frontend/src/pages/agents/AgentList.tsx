@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
-import { Plus, Trash2, Bot, ChevronRight, MessageSquare } from "lucide-react";
+import { Plus, Trash2, Bot, ChevronRight, ChevronLeft } from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { listAgents, deleteAgent } from "../../api";
 import type { AgentConfig } from "shared";
@@ -50,45 +50,47 @@ export default function AgentList() {
           flexShrink: 0,
         }}
       >
-        <h1 style={{ fontSize: 20, fontWeight: 600 }}>Agents</h1>
-        <div style={{ display: "flex", gap: 8 }}>
-          <button
-            onClick={() => navigate("/agents/new")}
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              background: "var(--accent)",
-              color: "#fff",
-              padding: "8px 14px",
-              borderRadius: 8,
-              fontSize: 14,
-              fontWeight: 500,
-              transition: "background 0.15s",
-            }}
-            onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-hover)")}
-            onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
-          >
-            <Plus size={16} />
-            {!isMobile && "New Agent"}
-          </button>
-          <button
-            onClick={() => navigate("/")}
-            style={{
-              background: "var(--bg-secondary)",
-              color: "var(--text)",
-              padding: "10px",
-              borderRadius: 8,
-              border: "1px solid var(--border)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            title="Chats"
-          >
-            <MessageSquare size={18} />
-          </button>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {isMobile && (
+            <button
+              onClick={() => navigate("/")}
+              style={{
+                background: "none",
+                border: "none",
+                padding: "4px 8px",
+                cursor: "pointer",
+                color: "var(--text)",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Back"
+            >
+              <ChevronLeft size={20} />
+            </button>
+          )}
+          <h1 style={{ fontSize: 20, fontWeight: 600 }}>Agents</h1>
         </div>
+        <button
+          onClick={() => navigate("/agents/new")}
+          style={{
+            display: "flex",
+            alignItems: "center",
+            gap: 6,
+            background: "var(--accent)",
+            color: "#fff",
+            padding: "8px 14px",
+            borderRadius: 8,
+            fontSize: 14,
+            fontWeight: 500,
+            transition: "background 0.15s",
+          }}
+          onMouseEnter={(e) => (e.currentTarget.style.background = "var(--accent-hover)")}
+          onMouseLeave={(e) => (e.currentTarget.style.background = "var(--accent)")}
+        >
+          <Plus size={16} />
+          {!isMobile && "New Agent"}
+        </button>
       </div>
 
       {/* Main content */}

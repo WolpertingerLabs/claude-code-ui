@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { useOutletContext } from "react-router-dom";
+// useOutletContext removed — agent is now passed as a prop
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getAgentActivity } from "../../../api";
 import type { ActivityEntry, AgentConfig } from "../../../api";
@@ -45,8 +45,7 @@ function formatTimestamp(ts: number): string {
   return `${d.toLocaleDateString([], { month: "short", day: "numeric" })} at ${time}`;
 }
 
-export default function Activity() {
-  const { agent } = useOutletContext<{ agent: AgentConfig }>();
+export default function Activity({ agent }: { agent: AgentConfig }) {
   const isMobile = useIsMobile();
   const [filter, setFilter] = useState<(typeof filterOptions)[number]>("all");
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
