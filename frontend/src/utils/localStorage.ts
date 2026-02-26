@@ -19,6 +19,7 @@ interface LocalStorageData {
   useWorktree?: boolean;
   showTriggeredChats?: boolean;
   themeMode?: ThemeMode;
+  sidebarCollapsed?: boolean;
 }
 
 /** Check if a path is inside the Callboard agent-workspaces directory (excluded from recommended folders). */
@@ -134,6 +135,17 @@ export function getThemeMode(): ThemeMode {
 export function saveThemeMode(mode: ThemeMode): void {
   const data = getStorageData();
   data.themeMode = mode;
+  setStorageData(data);
+}
+
+export function getSidebarCollapsed(): boolean {
+  const data = getStorageData();
+  return data.sidebarCollapsed ?? false;
+}
+
+export function saveSidebarCollapsed(value: boolean): void {
+  const data = getStorageData();
+  data.sidebarCollapsed = value;
   setStorageData(data);
 }
 
