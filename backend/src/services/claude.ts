@@ -16,6 +16,7 @@ import { buildProxyToolsServer } from "./proxy-tools.js";
 import { getAgentSettings, getActiveMcpConfigDir } from "./agent-settings.js";
 import { appendActivity } from "./agent-activity.js";
 import { getAgent } from "./agent-file-service.js";
+import { generateChatTitle } from "./quick-completion.js";
 import { createLogger } from "../utils/logger.js";
 
 const log = createLogger("claude");
@@ -688,6 +689,22 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
                 message: "Chat session started",
                 metadata: { chatId: sessionId },
               });
+            }
+
+            // Generate a title for new manual (non-triggered) chats
+            if (!opts.triggered) {
+              const promptText = typeof prompt === "string" ? prompt : null;
+              if (promptText) {
+                const chatId = trackingId;
+                generateChatTitle(promptText)
+                  .then((title) => {
+                    if (title) {
+                      chatFileService.updateChatMetadata(chatId, { title });
+                      log.debug(`Generated title for chat ${chatId}: "${title}"`);
+                    }
+                  })
+                  .catch(() => {}); // Title generation is non-critical
+              }
             }
           } else {
             // Existing chat: append session_id to metadata

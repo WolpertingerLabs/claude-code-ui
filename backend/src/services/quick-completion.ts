@@ -137,11 +137,10 @@ export async function quickCompletion(opts: QuickCompletionOptions): Promise<Qui
         tools: [], // No built-in Claude Code tools
         allowedTools,
         mcpServers: { qc: mcpServer },
-        maxTurns: 1,
+        maxTurns: 10,
         persistSession: false,
         settingSources: [],
         effort,
-        thinking: { type: "disabled" },
         systemPrompt: effectiveSystemPrompt,
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,

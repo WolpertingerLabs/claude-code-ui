@@ -164,6 +164,24 @@ export class ChatFileService {
     }
   }
 
+  // Update specific metadata fields on a chat (read-merge-write)
+  updateChatMetadata(id: string, fields: Record<string, unknown>): boolean {
+    const chat = this.getChat(id);
+    if (!chat) return false;
+
+    try {
+      const meta = JSON.parse(chat.metadata || "{}");
+      const merged = { ...meta, ...fields };
+      chat.metadata = JSON.stringify(merged);
+      chat.updated_at = new Date().toISOString();
+      this.saveChat(chat);
+      return true;
+    } catch (error) {
+      log.error(`Error updating chat metadata for ${id}: ${error}`);
+      return false;
+    }
+  }
+
   // Delete a chat
   deleteChat(sessionId: string): boolean {
     log.debug(`deleteChat — sessionId=${sessionId}`);

@@ -20,19 +20,21 @@ export default function ChatListItem({ chat, isActive, onClick, onDelete, onTogg
     minute: "2-digit",
   });
 
+  let title: string | undefined;
   let preview: string | undefined;
   let isBookmarked = false;
   let agentAlias: string | undefined;
   let isTriggered = false;
   try {
     const meta = JSON.parse(chat.metadata || "{}");
+    title = meta.title;
     preview = meta.preview;
     isBookmarked = meta.bookmarked === true;
     agentAlias = meta.agentAlias;
     isTriggered = meta.triggered === true;
   } catch {}
 
-  const displayName = preview ? (preview.length > 60 ? preview.slice(0, 60) + "..." : preview) : folderName;
+  const displayName = title || (preview ? (preview.length > 60 ? preview.slice(0, 60) + "..." : preview) : folderName);
 
   return (
     <div
