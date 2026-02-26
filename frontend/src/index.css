@@ -244,6 +244,13 @@ pre {
   }
 }
 
+@media (min-width: 769px) {
+  .split-sidebar,
+  .split-main {
+    transition: width 0.2s ease, min-width 0.2s ease;
+  }
+}
+
 @media (min-width: 769px) and (max-width: 1024px) {
   .split-sidebar {
     width: 25% !important;
@@ -252,6 +259,15 @@ pre {
 
   .split-main {
     width: 75% !important;
+  }
+
+  .split-sidebar.split-sidebar-collapsed {
+    width: 56px !important;
+    min-width: 56px !important;
+  }
+
+  .split-sidebar.split-sidebar-collapsed + .split-main {
+    width: calc(100% - 56px) !important;
   }
 }
 

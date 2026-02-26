@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { ClipboardList, X, Plus, Settings, Bot } from "lucide-react";
+import { ClipboardList, X, Plus, Settings, Bot, PanelLeftClose, PanelLeftOpen } from "lucide-react";
 import {
   listChats,
   deleteChat,
@@ -34,9 +34,11 @@ import {
 interface ChatListProps {
   activeChatId?: string;
   onRefresh: (refreshFn: () => void) => void;
+  sidebarCollapsed?: boolean;
+  onToggleSidebar?: () => void;
 }
 
-export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
+export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, onToggleSidebar }: ChatListProps) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [sessionStatuses, setSessionStatuses] = useState<Map<string, SessionStatus>>(new Map());
   const [hasMore, setHasMore] = useState(false);
@@ -340,6 +342,121 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
   // Determine the empty state message
   const isFiltered = bookmarkFilter || hasActiveFilters(filters) || matchingChatIds !== null;
 
+  // Collapsed sidebar view — icon rail with logo + vertical buttons
+  if (sidebarCollapsed) {
+    return (
+      <div
+        style={{
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          alignItems: "center",
+          paddingTop: 16,
+          gap: 8,
+        }}
+      >
+        <div
+          style={{
+            fontSize: 20,
+            fontWeight: 700,
+            color: "var(--accent)",
+            marginBottom: 8,
+            userSelect: "none",
+          }}
+        >
+          C
+        </div>
+        <button
+          onClick={() => {
+            if (sidebarCollapsed && onToggleSidebar) {
+              onToggleSidebar();
+            }
+            setShowNew(true);
+          }}
+          style={{
+            background: "var(--accent)",
+            color: "#fff",
+            padding: "10px",
+            borderRadius: 8,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="New Chat"
+        >
+          <Plus size={18} />
+        </button>
+        <button
+          onClick={() => navigate("/queue")}
+          style={{
+            background: isQueueActive ? "var(--accent)" : "var(--bg-secondary)",
+            color: isQueueActive ? "#fff" : "var(--text)",
+            padding: "10px",
+            borderRadius: 8,
+            border: isQueueActive ? "none" : "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Drafts"
+        >
+          <ClipboardList size={18} />
+        </button>
+        <button
+          onClick={() => navigate("/agents")}
+          style={{
+            background: isAgentsActive ? "var(--accent)" : "var(--bg-secondary)",
+            color: isAgentsActive ? "#fff" : "var(--text)",
+            padding: "10px",
+            borderRadius: 8,
+            border: isAgentsActive ? "none" : "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Agents"
+        >
+          <Bot size={18} />
+        </button>
+        <button
+          onClick={() => navigate("/settings")}
+          style={{
+            background: isSettingsActive ? "var(--accent)" : "var(--bg-secondary)",
+            color: isSettingsActive ? "#fff" : "var(--text)",
+            padding: "10px",
+            borderRadius: 8,
+            border: isSettingsActive ? "none" : "1px solid var(--border)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+          }}
+          title="Settings"
+        >
+          <Settings size={18} />
+        </button>
+        {onToggleSidebar && (
+          <button
+            onClick={onToggleSidebar}
+            style={{
+              background: "transparent",
+              color: "var(--text-muted)",
+              padding: "10px",
+              borderRadius: 8,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              marginTop: "auto",
+              marginBottom: 16,
+            }}
+            title="Expand sidebar"
+          >
+            <PanelLeftOpen size={18} />
+          </button>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
       <header
@@ -428,6 +545,23 @@ export default function ChatList({ activeChatId, onRefresh }: ChatListProps) {
               <Settings size={18} />
             </button>
           </div>
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              style={{
+                background: "transparent",
+                color: "var(--text-muted)",
+                padding: "6px",
+                borderRadius: 6,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="Collapse sidebar"
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          )}
         </div>
       </header>
 

@@ -1,5 +1,5 @@
 import { useLocation } from "react-router-dom";
-import { useRef } from "react";
+import { useRef, useState, useCallback } from "react";
 import { useIsMobile } from "../hooks/useIsMobile";
 import ChatList from "../pages/ChatList";
 import Chat from "../pages/Chat";
@@ -8,6 +8,7 @@ import Settings from "../pages/Settings";
 import AgentList from "../pages/agents/AgentList";
 import CreateAgent from "../pages/agents/CreateAgent";
 import AgentDashboard from "../pages/agents/AgentDashboard";
+import { getSidebarCollapsed, saveSidebarCollapsed } from "../utils/localStorage";
 
 interface SplitLayoutProps {
   onLogout: () => void;
@@ -17,6 +18,15 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
   const isMobile = useIsMobile();
   const location = useLocation();
   const chatListRefreshRef = useRef<(() => void) | null>(null);
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => getSidebarCollapsed());
+
+  const toggleSidebar = useCallback(() => {
+    setSidebarCollapsed((prev) => {
+      const next = !prev;
+      saveSidebarCollapsed(next);
+      return next;
+    });
+  }, []);
 
   // Check if we're on the settings page
   const isSettings = location.pathname === "/settings";
@@ -83,16 +93,17 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
         overflow: "hidden",
       }}
     >
-      {/* Chat List Sidebar - 1/4 of width */}
+      {/* Chat List Sidebar */}
       <div
-        className="split-sidebar"
+        className={`split-sidebar${sidebarCollapsed ? " split-sidebar-collapsed" : ""}`}
         style={{
-          width: "25%",
-          minWidth: "300px",
+          width: sidebarCollapsed ? "56px" : "25%",
+          minWidth: sidebarCollapsed ? "56px" : "300px",
           borderRight: "1px solid var(--border)",
           display: "flex",
           flexDirection: "column",
           background: "var(--bg)",
+          overflow: "hidden",
         }}
       >
         <ChatList
@@ -100,14 +111,16 @@ export default function SplitLayout({ onLogout }: SplitLayoutProps) {
           onRefresh={(fn) => {
             chatListRefreshRef.current = fn;
           }}
+          sidebarCollapsed={sidebarCollapsed}
+          onToggleSidebar={toggleSidebar}
         />
       </div>
 
-      {/* Main Content Area - 3/4 of width */}
+      {/* Main Content Area */}
       <div
         className="split-main"
         style={{
-          width: "75%",
+          width: sidebarCollapsed ? "calc(100% - 56px)" : "75%",
           display: "flex",
           flexDirection: "column",
           background: "var(--bg)",
