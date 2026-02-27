@@ -536,13 +536,23 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   useEffect(() => {
     if (!id) return;
 
+    // Detect if this is a new-chat → existing-chat transition.
+    // tempChatIdRef is set in the chat_created SSE handler right before navigating.
+    // When it matches the new id, we're transitioning from the new-chat page to the
+    // just-created chat — preserve inFlightMessage and streaming so the user still
+    // sees their sent message and the "thinking" indicator without a gap.
+    const isNewChatTransition = tempChatIdRef.current === id;
+
     // Track the current chat ID for staleness detection in closures
     currentIdRef.current = id;
 
     // Reset state for new chat — prevents old chat's streaming/error state
-    // from being visible while new chat data loads
-    setStreaming(false);
-    setInFlightMessage(null);
+    // from being visible while new chat data loads.
+    // Skip resetting inFlightMessage and streaming during new-chat transitions.
+    if (!isNewChatTransition) {
+      setStreaming(false);
+      setInFlightMessage(null);
+    }
     setPendingAction(null);
     setNetworkError(null);
     setInfo(null); // Clear new-chat info when transitioning to existing mode
