@@ -96,16 +96,20 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const agentSystemPrompt = (location.state as any)?.systemPrompt as string | undefined;
   const agentAlias = (location.state as any)?.agentAlias as string | undefined;
 
+  // When navigating from /chat/new → /chat/:id, the in-flight message is passed
+  // via router state so it survives the component remount.
+  const transitionInFlightMessage = (location.state as any)?.inFlightMessage as string | undefined;
+
   const [chat, setChat] = useState<ChatType | null>(null);
   const [info, setInfo] = useState<NewChatInfo | null>(null);
   const [messages, setMessages] = useState<ParsedMessage[]>([]);
-  const [streaming, setStreaming] = useState(false);
+  const [streaming, setStreaming] = useState(!!transitionInFlightMessage);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const globalSessionActive = useIsSessionActive(id);
   const [networkError, setNetworkError] = useState<string | null>(null);
   const [showDraftModal, setShowDraftModal] = useState(false);
   const [draftMessage, setDraftMessage] = useState("");
-  const [inFlightMessage, setInFlightMessage] = useState<string | null>(null);
+  const [inFlightMessage, setInFlightMessage] = useState<string | null>(transitionInFlightMessage ?? null);
   const [slashCommands, setSlashCommands] = useState<string[]>([]);
   const [plugins, setPlugins] = useState<Plugin[]>([]);
   const [activePluginIds, setActivePluginIds] = useState<string[]>([]);
@@ -126,6 +130,8 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const planApprovedRef = useRef(false);
   const tempChatIdRef = useRef<string | null>(null);
   const streamingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const inFlightMessageRef = useRef<string | null>(inFlightMessage);
+  inFlightMessageRef.current = inFlightMessage;
 
   // Compute team color map - assigns colors to teams in order of appearance
   const teamColorMap = useMemo(() => {
@@ -286,8 +292,12 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
               // Handle chat_created - fires during new chat creation
               if (event.type === "chat_created" && event.chatId) {
                 tempChatIdRef.current = event.chatId;
-                // Navigate to the real chat URL
-                navigateRef.current(`/chat/${event.chatId}`, { replace: true });
+                // Navigate to the real chat URL, passing the in-flight message
+                // via router state so it survives the component remount.
+                navigateRef.current(`/chat/${event.chatId}`, {
+                  replace: true,
+                  state: { inFlightMessage: inFlightMessageRef.current },
+                });
                 // Refresh chat list to show the new chat
                 onChatListRefreshRef.current?.();
                 // Cancel this stream - Chat will re-render with id param
@@ -537,11 +547,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     if (!id) return;
 
     // Detect if this is a new-chat → existing-chat transition.
-    // tempChatIdRef is set in the chat_created SSE handler right before navigating.
-    // When it matches the new id, we're transitioning from the new-chat page to the
-    // just-created chat — preserve inFlightMessage and streaming so the user still
-    // sees their sent message and the "thinking" indicator without a gap.
-    const isNewChatTransition = tempChatIdRef.current === id;
+    // When navigating from /chat/new → /chat/:id, the in-flight message is passed
+    // via router state (transitionInFlightMessage). We also check tempChatIdRef for
+    // same-component transitions (though those are rare with separate routes).
+    const isNewChatTransition = !!transitionInFlightMessage || tempChatIdRef.current === id;
 
     // Track the current chat ID for staleness detection in closures
     currentIdRef.current = id;
@@ -562,6 +571,12 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     hasReceivedFirstResponseRef.current = false;
     planApprovedRef.current = false;
     tempChatIdRef.current = null;
+
+    // Clear the router state so back/forward navigation doesn't re-apply the
+    // in-flight message from a previous transition.
+    if (transitionInFlightMessage) {
+      window.history.replaceState({}, "");
+    }
 
     getChat(id!).then((chatData) => {
       // Guard: only apply if still on this chat
