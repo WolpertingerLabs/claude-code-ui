@@ -5,7 +5,7 @@ import reactHooks from "eslint-plugin-react-hooks";
 
 export default tseslint.config(
   {
-    ignores: ["**/node_modules/**", "**/dist/**", "**/build/**"],
+    ignores: ["**/node_modules/**", "**/dist/**", "**/build/**", "**/.claude/worktrees/**"],
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,
@@ -55,8 +55,8 @@ export default tseslint.config(
     },
   },
   {
-    // Node.js files (like start-server.js)
-    files: ["*.js", "start-server.js"],
+    // Node.js files (bin/callboard.js)
+    files: ["*.js", "bin/*.js"],
     languageOptions: {
       globals: {
         console: "readonly",
@@ -67,6 +67,11 @@ export default tseslint.config(
         __filename: "readonly",
         Buffer: "readonly",
         global: "readonly",
+        // Node 22+ globals used by bin/callboard.js
+        fetch: "readonly",
+        AbortController: "readonly",
+        setTimeout: "readonly",
+        clearTimeout: "readonly",
       },
     },
   },
