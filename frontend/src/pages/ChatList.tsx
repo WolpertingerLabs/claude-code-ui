@@ -50,7 +50,6 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
   });
   const [chatMode, setChatMode] = useState<"claude-code" | "agent">("claude-code");
   const [agents, setAgents] = useState<AgentConfig[]>([]);
-  const [selectedAgent, setSelectedAgent] = useState<AgentConfig | null>(null);
   const [agentsLoading, setAgentsLoading] = useState(false);
   const navigate = useNavigate();
   const location = useLocation();
@@ -161,8 +160,8 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
     });
   };
 
-  const handleAgentCreate = async () => {
-    if (!selectedAgent?.workspacePath) return;
+  const handleAgentCreate = async (agent: AgentConfig) => {
+    if (!agent?.workspacePath) return;
 
     const agentPermissions: DefaultPermissions = {
       fileRead: "allow",
@@ -174,15 +173,14 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
     // Fetch compiled identity prompt for the agent
     let systemPrompt: string | undefined;
     try {
-      systemPrompt = await getAgentIdentityPrompt(selectedAgent.alias);
+      systemPrompt = await getAgentIdentityPrompt(agent.alias);
     } catch {
       // Continue without identity prompt if fetch fails
     }
 
     setShowNew(false);
-    setSelectedAgent(null);
-    navigate(`/chat/new?folder=${encodeURIComponent(selectedAgent.workspacePath)}`, {
-      state: { defaultPermissions: agentPermissions, systemPrompt, agentAlias: selectedAgent.alias },
+    navigate(`/chat/new?folder=${encodeURIComponent(agent.workspacePath)}`, {
+      state: { defaultPermissions: agentPermissions, systemPrompt, agentAlias: agent.alias },
     });
   };
 
@@ -573,7 +571,6 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
             <button
               onClick={() => {
                 setChatMode("claude-code");
-                setSelectedAgent(null);
               }}
               style={{
                 flex: 1,
@@ -726,18 +723,26 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
                   {agents.map((agent) => (
                     <button
                       key={agent.alias}
-                      onClick={() => setSelectedAgent(selectedAgent?.alias === agent.alias ? null : agent)}
+                      onClick={() => handleAgentCreate(agent)}
+                      disabled={!agent.workspacePath}
                       style={{
                         display: "flex",
                         alignItems: "center",
                         gap: 10,
                         textAlign: "left",
-                        background: selectedAgent?.alias === agent.alias ? "color-mix(in srgb, var(--accent) 15%, var(--surface))" : "var(--surface)",
-                        border: selectedAgent?.alias === agent.alias ? "1.5px solid var(--accent)" : "1px solid var(--border)",
+                        background: "var(--surface)",
+                        border: "1px solid var(--border)",
                         borderRadius: 8,
                         padding: "10px 12px",
-                        cursor: "pointer",
+                        cursor: agent.workspacePath ? "pointer" : "not-allowed",
                         transition: "border-color 0.15s",
+                        opacity: agent.workspacePath ? 1 : 0.5,
+                      }}
+                      onMouseEnter={(e) => {
+                        if (agent.workspacePath) e.currentTarget.style.borderColor = "var(--accent)";
+                      }}
+                      onMouseLeave={(e) => {
+                        if (agent.workspacePath) e.currentTarget.style.borderColor = "var(--border)";
                       }}
                     >
                       <div
@@ -770,23 +775,6 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
                       </div>
                     </button>
                   ))}
-
-                  <button
-                    onClick={handleAgentCreate}
-                    disabled={!selectedAgent}
-                    style={{
-                      marginTop: 6,
-                      background: selectedAgent ? "var(--accent)" : "var(--border)",
-                      color: "#fff",
-                      padding: "10px 16px",
-                      borderRadius: 8,
-                      fontSize: 14,
-                      fontWeight: 500,
-                      transition: "background 0.15s",
-                    }}
-                  >
-                    Start Chat
-                  </button>
                 </div>
               )}
             </>
