@@ -12,6 +12,8 @@ import {
   GitFork,
   ChevronUp,
   ChevronDown,
+  ArrowUpToLine,
+  ArrowDownToLine,
   MoreHorizontal,
 } from "lucide-react";
 import { useIsMobile } from "../hooks/useIsMobile";
@@ -1067,6 +1069,18 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     }
   }, [userMessageIndices, userMsgNavIndex]);
 
+  // Scroll to top of chat
+  const scrollToTop = useCallback(() => {
+    setAutoScroll(false);
+    chatContainerRef.current?.scrollTo({ top: 0, behavior: "smooth" });
+  }, []);
+
+  // Scroll to bottom of chat
+  const scrollToBottom = useCallback(() => {
+    setAutoScroll(true);
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, []);
+
   // Check if there are any TodoWrite tool calls in the conversation
   const hasTodoList = useMemo(() => {
     return messages.some((message) => message.type === "tool_use" && message.toolName === "TodoWrite");
@@ -1261,6 +1275,24 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             {id && userMessageIndices.length > 1 && (
               <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
                 <button
+                  onClick={scrollToTop}
+                  style={{
+                    background: "var(--bg-secondary, var(--surface))",
+                    color: "var(--text)",
+                    padding: "8px",
+                    border: "none",
+                    borderRight: "1px solid var(--border)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                  title="Jump to top"
+                >
+                  <ArrowUpToLine size={16} />
+                </button>
+                <button
                   onClick={navigatePrevUserMessage}
                   disabled={userMsgNavIndex === 0}
                   style={{
@@ -1288,6 +1320,7 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
                     color: userMsgNavIndex === null ? "var(--text-muted)" : "var(--text)",
                     padding: "8px",
                     border: "none",
+                    borderRight: "1px solid var(--border)",
                     cursor: userMsgNavIndex === null ? "default" : "pointer",
                     display: "flex",
                     alignItems: "center",
@@ -1298,6 +1331,24 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
                   title="Next user message"
                 >
                   <ChevronDown size={16} />
+                </button>
+                <button
+                  onClick={scrollToBottom}
+                  style={{
+                    background: "var(--bg-secondary, var(--surface))",
+                    color: "var(--text)",
+                    padding: "8px",
+                    border: "none",
+                    borderLeft: "1px solid var(--border)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                  title="Jump to bottom"
+                >
+                  <ArrowDownToLine size={16} />
                 </button>
               </div>
             )}
@@ -1446,6 +1497,23 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
           {id && userMessageIndices.length > 1 && (
             <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", flexShrink: 0 }}>
               <button
+                onClick={scrollToTop}
+                style={{
+                  background: "var(--bg-secondary, var(--surface))",
+                  color: "var(--text)",
+                  padding: "8px",
+                  border: "none",
+                  borderRight: "1px solid var(--border)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                title="Jump to top"
+              >
+                <ArrowUpToLine size={16} />
+              </button>
+              <button
                 onClick={navigatePrevUserMessage}
                 disabled={userMsgNavIndex === 0}
                 style={{
@@ -1481,6 +1549,23 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
                 title="Next user message"
               >
                 <ChevronDown size={16} />
+              </button>
+              <button
+                onClick={scrollToBottom}
+                style={{
+                  background: "var(--bg-secondary, var(--surface))",
+                  color: "var(--text)",
+                  padding: "8px",
+                  border: "none",
+                  borderLeft: "1px solid var(--border)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                title="Jump to bottom"
+              >
+                <ArrowDownToLine size={16} />
               </button>
             </div>
           )}
