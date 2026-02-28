@@ -1,5 +1,7 @@
 # Callboard
 
+> **Alpha Software:** This project is in alpha. Expect breaking changes between updates.
+
 A full-stack web interface for the [Anthropic Claude Code](https://docs.anthropic.com/en/docs/claude-code) agent SDK, providing real-time chat, tool permission management, image uploads, git integration, and more.
 
 ## Features
