@@ -1,6 +1,6 @@
 import { useState, useEffect } from "react";
 import { useParams, useNavigate, useLocation } from "react-router-dom";
-import { ChevronLeft, LayoutDashboard, MessageSquare, Clock, Zap, Plug, Radio, Activity, Brain, Bot, ArrowLeft } from "lucide-react";
+import { ChevronLeft, LayoutDashboard, Clock, Zap, Plug, Radio, Activity, Brain, Bot, ArrowLeft } from "lucide-react";
 import { useIsMobile } from "../../hooks/useIsMobile";
 import { getAgent as fetchAgent, getAgentIdentityPrompt } from "../../api";
 import type { AgentConfig, DefaultPermissions } from "shared";
@@ -171,13 +171,23 @@ export default function AgentDashboard() {
           }}
         >
           <div
+            onClick={agent.workspacePath ? handleStartChat : undefined}
             style={{
               fontSize: 18,
               fontWeight: 600,
               overflow: "hidden",
               textOverflow: "ellipsis",
               whiteSpace: "nowrap",
+              cursor: agent.workspacePath ? "pointer" : "default",
+              transition: "color 0.15s",
             }}
+            onMouseEnter={(e) => {
+              if (agent.workspacePath) e.currentTarget.style.color = "var(--accent)";
+            }}
+            onMouseLeave={(e) => {
+              if (agent.workspacePath) e.currentTarget.style.color = "var(--text)";
+            }}
+            title={agent.workspacePath ? "Start a new chat with this agent" : "Set a workspace path to enable chat"}
           >
             {agent.name}
           </div>
@@ -195,36 +205,6 @@ export default function AgentDashboard() {
             {agent.alias}
           </span>
         </div>
-        <button
-          onClick={handleStartChat}
-          disabled={!agent.workspacePath}
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            background: "var(--accent)",
-            color: "#fff",
-            border: "none",
-            fontSize: 13,
-            fontWeight: 500,
-            cursor: agent.workspacePath ? "pointer" : "not-allowed",
-            padding: "8px 14px",
-            borderRadius: 8,
-            transition: "background 0.15s",
-            flexShrink: 0,
-            opacity: agent.workspacePath ? 1 : 0.5,
-          }}
-          onMouseEnter={(e) => {
-            if (agent.workspacePath) e.currentTarget.style.background = "var(--accent-hover)";
-          }}
-          onMouseLeave={(e) => {
-            if (agent.workspacePath) e.currentTarget.style.background = "var(--accent)";
-          }}
-          title={agent.workspacePath ? "Start a new chat with this agent" : "Set a workspace path to enable chat"}
-        >
-          <MessageSquare size={14} />
-          {!isMobile && "Chat"}
-        </button>
         {!isMobile && (
           <button
             onClick={() => navigate("/agents")}
