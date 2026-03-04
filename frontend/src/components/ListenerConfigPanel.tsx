@@ -35,6 +35,7 @@ interface ListenerConfigPanelProps {
   localModeActive?: boolean;
   onClose: () => void;
   onStatusChange?: () => void;
+  onParamsSaved?: () => void;
 }
 
 export default function ListenerConfigPanel({
@@ -46,6 +47,7 @@ export default function ListenerConfigPanel({
   localModeActive,
   onClose,
   onStatusChange,
+  onParamsSaved,
 }: ListenerConfigPanelProps) {
   const [config, setConfig] = useState<ListenerConfigSchema | null>(null);
   const [loading, setLoading] = useState(true);
@@ -327,6 +329,7 @@ export default function ListenerConfigPanel({
         setOriginalValues(merged);
         setSaveResult({ success: true, message: "Parameters saved successfully" });
         onStatusChange?.();
+        onParamsSaved?.();
       } else {
         setSaveResult({ success: false, message: result.error || "Failed to save" });
       }
