@@ -1117,3 +1117,11 @@ export async function checkClaudeStatus(): Promise<ClaudeAuthStatus> {
   await assertOk(res, "Failed to check Claude status");
   return res.json();
 }
+
+// Server restart API
+
+export async function restartServer(): Promise<{ success: boolean; message: string }> {
+  const res = await fetch(`${BASE}/restart`, { method: "POST", credentials: "include" });
+  await assertOk(res, "Failed to restart server");
+  return res.json();
+}
