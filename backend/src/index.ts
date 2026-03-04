@@ -1,5 +1,5 @@
 import dotenv from "dotenv";
-import { execSync } from "child_process";
+import { execSync, spawn } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import express from "express";
 import path from "path";
@@ -221,6 +221,36 @@ app.post("/webhooks/:path", (req, res) => {
   }
   res.json({ received: true });
 });
+
+// Restart endpoint — delegates to `callboard restart` CLI which handles
+// the full stop → start lifecycle including PID file management.
+app.post(
+  "/api/restart",
+  // #swagger.tags = ['System']
+  // #swagger.summary = 'Restart the Callboard server'
+  // #swagger.description = 'Spawns `callboard restart` as a detached process which stops the current server and starts a fresh one.'
+  /* #swagger.responses[200] = { description: "Restart initiated" } */
+  (_req, res) => {
+    log.info("Restart requested via API");
+    res.json({ success: true, message: "Restarting..." });
+
+    // Give the response time to flush before triggering restart
+    setTimeout(() => {
+      try {
+        const bin = path.join(__pkgRoot, "bin/callboard.js");
+        const child = spawn(process.execPath, [bin, "restart"], {
+          detached: true,
+          stdio: "ignore",
+          env: process.env,
+        });
+        child.unref();
+        log.info(`Spawned 'callboard restart' (PID ${child.pid})`);
+      } catch (err: any) {
+        log.error(`Failed to spawn callboard restart: ${err.message}`);
+      }
+    }, 500);
+  },
+);
 
 // Serve frontend static files in production
 const frontendDist = path.join(__pkgRoot, "frontend/dist");

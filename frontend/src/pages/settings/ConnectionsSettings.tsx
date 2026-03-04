@@ -29,6 +29,7 @@ import {
   testProxyIngestor,
   getProxyIngestors,
   controlListener,
+  restartServer,
 } from "../../api";
 import type { ConnectionStatus, CallerInfo, ProxyTestResult, IngestorStatus } from "../../api";
 import ConfigureConnectionModal from "../../components/ConfigureConnectionModal";
@@ -68,6 +69,8 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
   const [ingestorStatuses, setIngestorStatuses] = useState<Record<string, IngestorStatus[]>>({});
   const [listenerConfig, setListenerConfig] = useState<{ alias: string; name: string } | null>(null);
   const [showEventsView, setShowEventsView] = useState(false);
+  const [needsRestart, setNeedsRestart] = useState(false);
+  const [restarting, setRestarting] = useState(false);
 
   const fetchIngestorStatuses = useCallback(
     async (caller?: string) => {
@@ -159,6 +162,7 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
     setConnections((prev) => prev.map((c) => (c.alias === alias ? { ...c, enabled } : c)));
     try {
       await setConnectionEnabled(alias, enabled, selectedCaller);
+      setNeedsRestart(true);
     } catch {
       // Revert on failure
       setConnections((prev) => prev.map((c) => (c.alias === alias ? { ...c, enabled: !enabled } : c)));
@@ -180,6 +184,20 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
         return { ...c, requiredSecretsSet, optionalSecretsSet };
       }),
     );
+    setNeedsRestart(true);
+  };
+
+  const handleRestart = async () => {
+    setRestarting(true);
+    try {
+      await restartServer();
+      // Give the server time to shut down and restart before reloading
+      setTimeout(() => {
+        window.location.reload();
+      }, 3000);
+    } catch {
+      setRestarting(false);
+    }
   };
 
   const stabilitySet = new Set<string>(stabilityFilter === "stable" ? ["stable"] : stabilityFilter === "beta" ? ["stable", "beta"] : ["stable", "beta", "dev"]);
@@ -622,6 +640,54 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
           </button>
         </div>
 
+        {/* Restart needed banner */}
+        {needsRestart && (
+          <div
+            style={{
+              background: "color-mix(in srgb, var(--warning) 8%, transparent)",
+              border: "1px solid color-mix(in srgb, var(--warning) 25%, transparent)",
+              borderRadius: "var(--radius)",
+              padding: "14px 18px",
+              marginBottom: 16,
+              display: "flex",
+              gap: 12,
+              alignItems: "center",
+              justifyContent: "space-between",
+              flexWrap: "wrap",
+            }}
+          >
+            <div style={{ display: "flex", gap: 10, alignItems: "center", flex: 1, minWidth: 0 }}>
+              <AlertTriangle size={18} style={{ color: "var(--warning)", flexShrink: 0 }} />
+              <span style={{ fontSize: 13, lineHeight: 1.5, color: "var(--text)" }}>
+                Settings have changed. Restart Callboard for changes to take full effect.
+              </span>
+            </div>
+            <button
+              onClick={handleRestart}
+              disabled={restarting}
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: 6,
+                padding: "7px 14px",
+                borderRadius: 6,
+                border: "1px solid var(--warning)",
+                background: "color-mix(in srgb, var(--warning) 12%, transparent)",
+                color: "var(--warning)",
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: restarting ? "not-allowed" : "pointer",
+                opacity: restarting ? 0.7 : 1,
+                whiteSpace: "nowrap",
+                flexShrink: 0,
+              }}
+            >
+              <RotateCw size={14} style={restarting ? { animation: "spin 1s linear infinite" } : undefined} />
+              {restarting ? "Restarting..." : "Restart Callboard"}
+            </button>
+          </div>
+        )}
+
         {/* Events view or connections grid */}
         {showEventsView ? (
           <ConnectionEventsView selectedCaller={selectedCaller} onBack={() => setShowEventsView(false)} />
@@ -751,6 +817,7 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
           localModeActive={localModeActive}
           onClose={() => setListenerConfig(null)}
           onStatusChange={() => fetchIngestorStatuses()}
+          onParamsSaved={() => setNeedsRestart(true)}
         />
       )}
     </>
