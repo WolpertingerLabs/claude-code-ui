@@ -41,5 +41,6 @@ export interface AgentConfig {
     enabled: boolean;
     start: string; // "HH:MM" (24-hour)
     end: string; // "HH:MM" (24-hour)
+    scope?: "all" | "crons" | "triggers"; // what to suppress (default: "all")
   };
 }
