@@ -60,8 +60,8 @@ export class LocalProxy {
     for (const [alias, caller] of Object.entries(config.callers)) {
       try {
         const callerRoutes = resolveCallerRoutes(config, alias);
-        const callerEnv = resolveSecrets(caller?.env ?? {});
-        this.routesByCallerAlias.set(alias, resolveRoutes(callerRoutes, callerEnv));
+        const callerEnv = resolveSecrets(caller?.env ?? {}, undefined, alias);
+        this.routesByCallerAlias.set(alias, resolveRoutes(callerRoutes, callerEnv, alias));
       } catch (err: any) {
         log.warn(`Failed to resolve routes for caller "${alias}": ${err.message}`);
       }
