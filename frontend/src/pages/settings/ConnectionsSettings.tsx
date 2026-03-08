@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import {
   Wifi,
   WifiOff,
@@ -73,46 +73,43 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
   const [needsRestart, setNeedsRestart] = useState(false);
   const [restarting, setRestarting] = useState(false);
 
-  const fetchIngestorStatuses = useCallback(
-    async (caller?: string) => {
-      try {
-        const data = await getProxyIngestors(caller || selectedCaller);
-        if (data.ingestors) {
-          const statusMap: Record<string, IngestorStatus[]> = {};
-          for (const status of data.ingestors) {
-            if (!statusMap[status.connection]) statusMap[status.connection] = [];
-            statusMap[status.connection].push(status);
-          }
-          setIngestorStatuses(statusMap);
-        }
-      } catch {
-        // silently fail — ingestor status is supplementary
-      }
-    },
-    [selectedCaller],
-  );
+  const selectedCallerRef = useRef(selectedCaller);
+  selectedCallerRef.current = selectedCaller;
 
-  const fetchConnections = useCallback(
-    async (caller?: string) => {
-      try {
-        const data = await getConnections(caller || selectedCaller);
-        setConnections(data.templates);
-        setCallers(data.callers || []);
-        setLocalModeActive(data.localModeActive);
-        setRemoteModeActive(data.remoteModeActive ?? false);
-        setRemoteConfigManagement(data.remoteConfigManagement ?? false);
-        // When switching to remote mode for the first time, pick the first available caller
-        if (!data.localModeActive && data.remoteModeActive && data.callers?.length > 0 && !caller) {
-          setSelectedCaller(data.callers[0].alias);
+  const fetchIngestorStatuses = useCallback(async (caller?: string) => {
+    try {
+      const data = await getProxyIngestors(caller || selectedCallerRef.current);
+      if (data.ingestors) {
+        const statusMap: Record<string, IngestorStatus[]> = {};
+        for (const status of data.ingestors) {
+          if (!statusMap[status.connection]) statusMap[status.connection] = [];
+          statusMap[status.connection].push(status);
         }
-      } catch {
-        setConnections([]);
-      } finally {
-        setLoading(false);
+        setIngestorStatuses(statusMap);
       }
-    },
-    [selectedCaller],
-  );
+    } catch {
+      // silently fail — ingestor status is supplementary
+    }
+  }, []);
+
+  const fetchConnections = useCallback(async (caller?: string) => {
+    try {
+      const data = await getConnections(caller || selectedCallerRef.current);
+      setConnections(data.templates);
+      setCallers(data.callers || []);
+      setLocalModeActive(data.localModeActive);
+      setRemoteModeActive(data.remoteModeActive ?? false);
+      setRemoteConfigManagement(data.remoteConfigManagement ?? false);
+      // When switching to remote mode for the first time, pick the first available caller
+      if (!data.localModeActive && data.remoteModeActive && data.callers?.length > 0 && !caller) {
+        setSelectedCaller(data.callers[0].alias);
+      }
+    } catch {
+      setConnections([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
     setLoading(true);
@@ -125,6 +122,7 @@ export default function ConnectionsSettings({ onSwitchTab }: ConnectionsSettings
     setShowCallerMenu(false);
     setLoading(true);
     fetchConnections(caller);
+    fetchIngestorStatuses(caller);
   };
 
   const handleCreateCaller = async () => {
