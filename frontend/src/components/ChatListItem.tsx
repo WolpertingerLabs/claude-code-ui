@@ -1,4 +1,4 @@
-import { Globe, Monitor, X, Bookmark, Bot, Zap } from "lucide-react";
+import { Globe, Monitor, X, Bookmark, Bot, Zap, GitBranch } from "lucide-react";
 import type { Chat } from "../api";
 
 interface Props {
@@ -150,7 +150,31 @@ export default function ChatListItem({ chat, isActive, onClick, onDelete, onTogg
         >
           {displayPath}
         </div>
-        <div style={{ fontSize: 11, color: "var(--chatlist-item-time-text)", marginTop: 2 }}>{time}</div>
+        <div style={{ fontSize: 11, color: "var(--chatlist-item-time-text)", marginTop: 2, display: "flex", alignItems: "center", gap: 6 }}>
+          {time}
+          {chat.git_branch && (
+            <span
+              title={chat.folder !== chat.displayFolder ? `Worktree: ${chat.git_branch}` : `Branch: ${chat.git_branch}`}
+              style={{
+                display: "inline-flex",
+                alignItems: "center",
+                gap: 3,
+                fontSize: 10,
+                padding: "0 5px",
+                borderRadius: 3,
+                background: "var(--chatlist-badge-agent-bg)",
+                color: "var(--chatlist-item-time-text)",
+                maxWidth: 140,
+                overflow: "hidden",
+                textOverflow: "ellipsis",
+                whiteSpace: "nowrap",
+              }}
+            >
+              <GitBranch size={10} style={{ flexShrink: 0 }} />
+              {chat.git_branch}
+            </span>
+          )}
+        </div>
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 2, marginLeft: 8, flexShrink: 0 }}>
         {onToggleBookmark && (
