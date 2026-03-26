@@ -50,6 +50,7 @@ import { connectionsRouter } from "./routes/connections.js";
 import { sessionsRouter } from "./routes/sessions.js";
 import { themesRouter } from "./routes/themes.js";
 import { filesRouter } from "./routes/files.js";
+import { mcpToolsRouter } from "./routes/mcp-tools.js";
 import { loginHandler, logoutHandler, checkAuthHandler, requireAuth, changePasswordHandler } from "./auth.js";
 import { createLogger } from "./utils/logger.js";
 import { initScheduler, shutdownScheduler } from "./services/cron-scheduler.js";
@@ -198,6 +199,7 @@ app.use("/api/connections", connectionsRouter);
 app.use("/api/sessions", sessionsRouter);
 app.use("/api/themes", themesRouter);
 app.use("/api/files", filesRouter);
+app.use("/api/mcp-tools", mcpToolsRouter);
 
 // Instance name endpoints (requires auth)
 import { getInstanceName, saveInstanceName, generateInstanceName } from "./utils/paths.js";

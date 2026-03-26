@@ -35,6 +35,10 @@ import type {
   ConnectionStatus,
   CustomTheme,
   ThemeListItem,
+  McpToolDefinition,
+  McpToolParameter,
+  McpToolServerInfo,
+  McpToolsResponse,
 } from "shared/types/index.js";
 
 export type {
@@ -74,6 +78,10 @@ export type {
   ConnectionStatus,
   CustomTheme,
   ThemeListItem,
+  McpToolDefinition,
+  McpToolParameter,
+  McpToolServerInfo,
+  McpToolsResponse,
 };
 
 const BASE = "/api";
@@ -1331,4 +1339,13 @@ export async function deleteTheme(name: string): Promise<void> {
     credentials: "include",
   });
   await assertOk(res, "Failed to delete theme");
+}
+
+// ── MCP Tools ────────────────────────────────────────────────────────
+
+export async function getMcpTools(context?: "chat" | "agent"): Promise<McpToolsResponse> {
+  const params = context ? `?context=${context}` : "";
+  const res = await fetch(`${BASE}/mcp-tools${params}`, { credentials: "include" });
+  await assertOk(res, "Failed to get MCP tools");
+  return res.json();
 }

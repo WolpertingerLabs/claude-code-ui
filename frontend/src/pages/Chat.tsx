@@ -5,6 +5,7 @@ import {
   CheckSquare,
   Square,
   Slash,
+  Wrench,
   ArrowLeft,
   ArrowDown,
   MessageSquare,
@@ -29,6 +30,7 @@ import {
   getSlashCommandsAndPlugins,
   getNewChatInfo,
   markAsRead,
+  getMcpTools,
   type Chat as ChatType,
   type ParsedMessage,
   type Plugin,
@@ -36,6 +38,7 @@ import {
   type DefaultPermissions,
   type BranchConfig,
   type AppPluginsData,
+  type McpToolsResponse,
 } from "../api";
 import { useIsSessionActive } from "../contexts/SessionContext";
 import MessageBubble, { TEAM_COLORS } from "../components/MessageBubble";
@@ -127,6 +130,9 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
   const [activePluginIds, setActivePluginIds] = useState<string[]>([]);
   const [appPluginsData, setAppPluginsData] = useState<AppPluginsData | null>(null);
   const [showSlashCommandsModal, setShowSlashCommandsModal] = useState(false);
+  const [slashCommandsModalTab, setSlashCommandsModalTab] = useState<"commands" | "tools">("commands");
+  const [mcpTools, setMcpTools] = useState<McpToolsResponse | null>(null);
+  const [mcpToolsLoading, setMcpToolsLoading] = useState(false);
   const [promptInputSetValue, setPromptInputSetValue] = useState<((value: string) => void) | null>(null);
   const [autoScroll, setAutoScroll] = useState(true);
   const [compacting, setCompacting] = useState(false);
@@ -619,6 +625,17 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
       console.warn("Failed to load slash commands and plugins:", error);
     }
   }, [id]);
+
+  // Fetch MCP tools once on mount (context-independent, cached for the session)
+  useEffect(() => {
+    if (mcpTools) return; // Already loaded
+    setMcpToolsLoading(true);
+    const context = agentAlias ? "agent" : undefined;
+    getMcpTools(context)
+      .then(setMcpTools)
+      .catch((err) => console.warn("Failed to load MCP tools:", err))
+      .finally(() => setMcpToolsLoading(false));
+  }, [agentAlias]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Load folder info for new chat mode
   useEffect(() => {
@@ -1514,7 +1531,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             {/* Slash Commands Modal Button */}
             {allSlashCommands.length > 0 && (
               <button
-                onClick={() => setShowSlashCommandsModal(true)}
+                onClick={() => {
+                  setSlashCommandsModalTab("commands");
+                  setShowSlashCommandsModal(true);
+                }}
                 style={{
                   background: "var(--bg-secondary)",
                   color: "var(--text)",
@@ -1531,6 +1551,28 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
                 <Slash size={16} />
               </button>
             )}
+
+            {/* MCP Tools Button */}
+            <button
+              onClick={() => {
+                setSlashCommandsModalTab("tools");
+                setShowSlashCommandsModal(true);
+              }}
+              style={{
+                background: "var(--bg-secondary)",
+                color: "var(--text)",
+                padding: "8px",
+                borderRadius: 6,
+                border: "1px solid var(--border)",
+                cursor: "pointer",
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+              }}
+              title="View available MCP tools"
+            >
+              <Wrench size={16} />
+            </button>
 
             {/* Chat Permissions Button */}
             <button
@@ -1750,7 +1792,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
 
           {allSlashCommands.length > 0 && (
             <button
-              onClick={() => setShowSlashCommandsModal(true)}
+              onClick={() => {
+                setSlashCommandsModalTab("commands");
+                setShowSlashCommandsModal(true);
+              }}
               style={{
                 background: "var(--bg-secondary)",
                 color: "var(--text)",
@@ -1768,6 +1813,29 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
               <Slash size={16} />
             </button>
           )}
+
+          {/* MCP Tools Button */}
+          <button
+            onClick={() => {
+              setSlashCommandsModalTab("tools");
+              setShowSlashCommandsModal(true);
+            }}
+            style={{
+              background: "var(--bg-secondary)",
+              color: "var(--text)",
+              padding: "8px",
+              borderRadius: 6,
+              border: "1px solid var(--border)",
+              cursor: "pointer",
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              flexShrink: 0,
+            }}
+            title="View available MCP tools"
+          >
+            <Wrench size={16} />
+          </button>
 
           {/* Chat Permissions Button */}
           <button
@@ -1916,6 +1984,61 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
                               }}
                             >
                               +{allSlashCommands.length - 8} more
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* MCP Tools if available */}
+                    {mcpTools && mcpTools.tools.length > 0 && (
+                      <div
+                        style={{
+                          background: "var(--bg-secondary)",
+                          borderRadius: 12,
+                          padding: "20px 24px",
+                          marginBottom: 16,
+                        }}
+                      >
+                        <div style={{ fontSize: 13, color: "var(--text-muted)", marginBottom: 12, display: "flex", alignItems: "center", gap: 6 }}>
+                          <Wrench size={14} />
+                          Available Tools
+                          <span style={{ fontSize: 11, color: "var(--text-muted)", marginLeft: "auto" }}>{mcpTools.tools.length} total</span>
+                        </div>
+                        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                          {mcpTools.tools.slice(0, 6).map((tool) => (
+                            <span
+                              key={tool.qualifiedName}
+                              style={{
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "6px 12px",
+                                fontSize: 12,
+                                color: "var(--text)",
+                                fontFamily: "var(--font-mono)",
+                              }}
+                            >
+                              {tool.name}
+                            </span>
+                          ))}
+                          {mcpTools.tools.length > 6 && (
+                            <button
+                              onClick={() => {
+                                setSlashCommandsModalTab("tools");
+                                setShowSlashCommandsModal(true);
+                              }}
+                              style={{
+                                background: "var(--bg)",
+                                border: "1px solid var(--border)",
+                                borderRadius: 6,
+                                padding: "6px 12px",
+                                fontSize: 12,
+                                color: "var(--text-muted)",
+                                cursor: "pointer",
+                              }}
+                            >
+                              +{mcpTools.tools.length - 6} more
                             </button>
                           )}
                         </div>
@@ -2244,6 +2367,10 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         onCommandSelect={handleCommandSelect}
         onActivePluginsChange={setActivePluginIds}
         onAppPluginsDataChange={setAppPluginsData}
+        mcpTools={mcpTools}
+        mcpToolsLoading={mcpToolsLoading}
+        activeTab={slashCommandsModalTab}
+        onTabChange={setSlashCommandsModalTab}
       />
 
       <ChatPermissionsModal
