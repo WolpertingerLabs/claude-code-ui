@@ -28,6 +28,27 @@ export interface McpServerConfig {
   mcpJsonDir?: string;
 }
 
+/** A single hook entry from a plugin's hooks.json */
+export interface PluginHookEntry {
+  type: "command" | "prompt";
+  command?: string;
+  prompt?: string;
+  timeout?: number;
+}
+
+/** A hook matcher from a plugin's hooks.json */
+export interface PluginHookMatcher {
+  matcher?: string;
+  hooks: PluginHookEntry[];
+  timeout?: number;
+}
+
+/** Parsed hooks.json content for a plugin */
+export interface PluginHooksConfig {
+  description?: string;
+  hooks: Partial<Record<string, PluginHookMatcher[]>>;
+}
+
 /** An app-wide plugin discovered from a recursive scan */
 export interface AppPlugin {
   /** Unique ID (SHA-256 hash prefix of absolute plugin path) */
@@ -46,6 +67,8 @@ export interface AppPlugin {
   enabled: boolean;
   /** MCP servers discovered inside this plugin's .mcp.json (if any) */
   mcpServers?: McpServerConfig[];
+  /** Hook definitions discovered from this plugin's hooks/hooks.json (if any) */
+  hooksConfig?: PluginHooksConfig;
 }
 
 /** Stored scan root entry with metadata */

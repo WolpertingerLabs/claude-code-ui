@@ -1,6 +1,7 @@
 import { query } from "@anthropic-ai/claude-agent-sdk";
-import type { PermissionResult } from "@anthropic-ai/claude-agent-sdk";
+import type { PermissionResult, HookEvent, HookCallbackMatcher, HookCallback, HookInput, HookJSONOutput } from "@anthropic-ai/claude-agent-sdk";
 import { EventEmitter } from "events";
+import { execFile } from "child_process";
 import { resolve, isAbsolute } from "path";
 import { chatFileService } from "./chat-file-service.js";
 import { findChat } from "../utils/chat-lookup.js";
@@ -215,6 +216,91 @@ function buildMcpServerOptions(): { mcpServers: Record<string, any>; allowedTool
     return { mcpServers: serverConfig, allowedTools, resolvedEnvVars };
   } catch (error) {
     log.warn(`Failed to build MCP server options: ${error}`);
+    return undefined;
+  }
+}
+
+/**
+ * Create a HookCallback that executes a shell command.
+ * Receives HookInput as JSON on stdin, expects HookJSONOutput as JSON on stdout.
+ */
+function createCommandHookCallback(command: string, hookTimeout?: number): HookCallback {
+  return async (input: HookInput, toolUseId: string | undefined, { signal }: { signal: AbortSignal }) => {
+    return new Promise<HookJSONOutput>((resolvePromise) => {
+      const timeout = (hookTimeout ?? 60) * 1000;
+      const child = execFile("bash", ["-c", command], { timeout }, (error, stdout) => {
+        if (error) {
+          log.warn(`Hook command failed: ${command} — ${error.message}`);
+          resolvePromise({ continue: true });
+          return;
+        }
+        try {
+          const result = JSON.parse(stdout.trim());
+          resolvePromise(result);
+        } catch {
+          log.warn(`Hook command returned non-JSON output: ${command} — ${stdout.slice(0, 200)}`);
+          resolvePromise({ continue: true });
+        }
+      });
+
+      signal.addEventListener("abort", () => child.kill(), { once: true });
+
+      if (child.stdin) {
+        child.stdin.write(JSON.stringify({ ...input, tool_use_id: toolUseId }));
+        child.stdin.end();
+      }
+    });
+  };
+}
+
+/**
+ * Build SDK hooks from all enabled plugins' hook configurations.
+ * Merges hooks across plugins by event type, resolving ${CLAUDE_PLUGIN_ROOT} in commands.
+ */
+function buildHookOptions(): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+  try {
+    const appPlugins = getEnabledAppPlugins();
+    const mergedHooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
+    let hookCount = 0;
+
+    for (const plugin of appPlugins) {
+      if (!plugin.hooksConfig?.hooks) continue;
+
+      for (const [eventName, matchers] of Object.entries(plugin.hooksConfig.hooks)) {
+        if (!Array.isArray(matchers)) continue;
+
+        const hookEvent = eventName as HookEvent;
+        if (!mergedHooks[hookEvent]) {
+          mergedHooks[hookEvent] = [];
+        }
+
+        for (const matcher of matchers) {
+          const callbacks: HookCallback[] = [];
+
+          for (const hookEntry of matcher.hooks) {
+            if (hookEntry.type === "command" && hookEntry.command) {
+              const resolvedCommand = hookEntry.command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, plugin.pluginPath);
+              callbacks.push(createCommandHookCallback(resolvedCommand, hookEntry.timeout ?? matcher.timeout));
+              hookCount++;
+            }
+          }
+
+          if (callbacks.length > 0) {
+            mergedHooks[hookEvent]!.push({
+              matcher: matcher.matcher,
+              hooks: callbacks,
+              timeout: matcher.timeout,
+            });
+          }
+        }
+      }
+    }
+
+    if (hookCount === 0) return undefined;
+    log.info(`Built ${hookCount} hook callback(s) from enabled plugins`);
+    return mergedHooks;
+  } catch (error) {
+    log.warn(`Failed to build hook options: ${error}`);
     return undefined;
   }
 }
@@ -573,6 +659,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
   // Always build plugin options (includes app-wide plugins even when no per-directory plugins are active)
   const plugins = buildPluginOptions(folder, activePlugins);
   const mcpOpts = buildMcpServerOptions();
+  const hookOpts = buildHookOptions();
 
   // Build MCP servers map: start with configured servers, add Callboard agent tools if this is an agent session
   const mcpServers: Record<string, any> = mcpOpts ? { ...mcpOpts.mcpServers } : {};
@@ -679,6 +766,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
       ...(resumeSessionId ? { resume: resumeSessionId } : {}),
       ...(plugins.length > 0 ? { plugins } : {}),
       ...(hasMcpServers ? { mcpServers, allowedTools } : {}),
+      ...(hookOpts ? { hooks: hookOpts } : {}),
       ...(opts.systemPrompt ? { systemPrompt: { type: "preset", preset: "claude_code", append: opts.systemPrompt } } : {}),
       env: {
         ...process.env,

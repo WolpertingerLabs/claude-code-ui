@@ -3,7 +3,7 @@ import { join, resolve } from "path";
 import { createHash } from "crypto";
 import { DATA_DIR, ensureDataDir } from "../utils/paths.js";
 import { createLogger } from "../utils/logger.js";
-import type { AppPlugin, McpServerConfig, AppPluginsData, ScanResult } from "shared/types/index.js";
+import type { AppPlugin, McpServerConfig, AppPluginsData, ScanResult, PluginHooksConfig } from "shared/types/index.js";
 import type { PluginManifest, PluginCommand } from "shared/types/index.js";
 
 const log = createLogger("app-plugins");
@@ -221,6 +221,32 @@ function discoverMcpServers(pluginSourcePath: string, marketplaceDir: string, so
   return parseMcpJsonFile(mcpJsonPath, sourcePluginId);
 }
 
+/**
+ * Discover hook definitions from a plugin's hooks/hooks.json file.
+ */
+function discoverHooks(pluginSourcePath: string, marketplaceDir: string): PluginHooksConfig | undefined {
+  const absoluteSourcePath = resolve(marketplaceDir, pluginSourcePath);
+  const hooksJsonPath = join(absoluteSourcePath, "hooks", "hooks.json");
+  if (!existsSync(hooksJsonPath)) {
+    return undefined;
+  }
+  try {
+    const raw = readFileSync(hooksJsonPath, "utf-8");
+    const parsed = JSON.parse(raw);
+    if (!parsed.hooks || typeof parsed.hooks !== "object") {
+      log.warn(`hooks.json at ${hooksJsonPath} missing "hooks" object`);
+      return undefined;
+    }
+    return {
+      description: parsed.description,
+      hooks: parsed.hooks,
+    };
+  } catch (error) {
+    log.warn(`Failed to parse hooks.json at ${hooksJsonPath}: ${error}`);
+    return undefined;
+  }
+}
+
 // ─── Recursive Directory Scanning ──────────────────────────────────────────
 
 interface DiscoveredMarketplace {
@@ -328,6 +354,7 @@ function scanDirectory(rootDir: string): { plugins: AppPlugin[] } {
         const pluginId = generateId(absolutePluginPath);
         const commands = discoverPluginCommands(p.source, marketplaceDir);
         const mcpServers = discoverMcpServers(p.source, marketplaceDir, pluginId);
+        const hooksConfig = discoverHooks(p.source, marketplaceDir);
 
         const manifest: PluginManifest = {
           name: p.name,
@@ -344,6 +371,7 @@ function scanDirectory(rootDir: string): { plugins: AppPlugin[] } {
           commands,
           enabled: true,
           ...(mcpServers.length > 0 && { mcpServers }),
+          ...(hooksConfig && { hooksConfig }),
         };
 
         plugins.push(plugin);
