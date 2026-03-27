@@ -224,11 +224,11 @@ function buildMcpServerOptions(): { mcpServers: Record<string, any>; allowedTool
  * Create a HookCallback that executes a shell command.
  * Receives HookInput as JSON on stdin, expects HookJSONOutput as JSON on stdout.
  */
-function createCommandHookCallback(command: string, hookTimeout?: number): HookCallback {
+function createCommandHookCallback(command: string, pluginPath: string, hookTimeout?: number): HookCallback {
   return async (input: HookInput, toolUseId: string | undefined, { signal }: { signal: AbortSignal }) => {
     return new Promise<HookJSONOutput>((resolvePromise) => {
       const timeout = (hookTimeout ?? 60) * 1000;
-      const child = execFile("bash", ["-c", command], { timeout }, (error, stdout) => {
+      const child = execFile("bash", ["-c", command], { timeout, env: { ...process.env, CLAUDE_PLUGIN_ROOT: pluginPath } }, (error, stdout) => {
         if (error) {
           log.warn(`Hook command failed: ${command} — ${error.message}`);
           resolvePromise({ continue: true });
@@ -280,7 +280,7 @@ function buildHookOptions(): Partial<Record<HookEvent, HookCallbackMatcher[]>> |
           for (const hookEntry of matcher.hooks) {
             if (hookEntry.type === "command" && hookEntry.command) {
               const resolvedCommand = hookEntry.command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, plugin.pluginPath);
-              callbacks.push(createCommandHookCallback(resolvedCommand, hookEntry.timeout ?? matcher.timeout));
+              callbacks.push(createCommandHookCallback(resolvedCommand, plugin.pluginPath, hookEntry.timeout ?? matcher.timeout));
               hookCount++;
             }
           }
