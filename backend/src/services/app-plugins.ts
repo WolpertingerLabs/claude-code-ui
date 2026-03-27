@@ -254,7 +254,7 @@ function findMarketplaceFiles(rootDir: string): DiscoveredMarketplace[] {
     if (existsSync(marketplacePath)) {
       marketplaces.push({
         marketplacePath,
-        marketplaceDir: currentPath,
+        marketplaceDir: join(currentPath, ".claude-plugin"),
       });
     }
 
