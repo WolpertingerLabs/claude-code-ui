@@ -28,6 +28,7 @@ type MessageSender = (opts: {
   maxTurns?: number;
   defaultPermissions?: any;
   triggered?: boolean;
+  triggeredBy?: "cron" | "event" | "trigger" | "tool";
 }) => Promise<import("events").EventEmitter>;
 
 let _sendMessage: MessageSender | null = null;
@@ -103,6 +104,7 @@ export async function executeAgent(opts: ExecuteAgentOptions): Promise<ExecuteAg
       agentAlias,
       maxTurns: maxTurns ?? 200,
       triggered: true,
+      triggeredBy,
       defaultPermissions: {
         fileRead: "allow",
         fileWrite: "allow",

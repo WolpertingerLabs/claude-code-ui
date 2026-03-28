@@ -21,6 +21,8 @@ interface LocalStorageData {
   themeMode?: ThemeMode;
   customThemeName?: string | null;
   sidebarCollapsed?: boolean;
+  sidebarViewMode?: "folders" | "chats";
+  folderMaxAgeDays?: number;
 }
 
 /** Check if a path is inside the Callboard agent-workspaces directory (excluded from recommended folders). */
@@ -169,6 +171,30 @@ export function getSidebarCollapsed(): boolean {
 export function saveSidebarCollapsed(value: boolean): void {
   const data = getStorageData();
   data.sidebarCollapsed = value;
+  setStorageData(data);
+}
+
+export type SidebarViewMode = "folders" | "chats";
+
+export function getSidebarViewMode(): SidebarViewMode {
+  const data = getStorageData();
+  return data.sidebarViewMode ?? "chats";
+}
+
+export function saveSidebarViewMode(mode: SidebarViewMode): void {
+  const data = getStorageData();
+  data.sidebarViewMode = mode;
+  setStorageData(data);
+}
+
+export function getFolderMaxAgeDays(): number {
+  const data = getStorageData();
+  return data.folderMaxAgeDays ?? 5;
+}
+
+export function saveFolderMaxAgeDays(days: number): void {
+  const data = getStorageData();
+  data.folderMaxAgeDays = days;
   setStorageData(data);
 }
 

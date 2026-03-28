@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { X, Plus, Settings, Bot, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, AlertTriangle, FileText } from "lucide-react";
+import { X, Plus, Settings, Bot, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, AlertTriangle, FileText, FolderOpen, List } from "lucide-react";
 import {
   listChats,
   deleteChat,
@@ -42,6 +42,7 @@ interface ChatListProps {
   onToggleSidebar?: () => void;
   claudeLoggedIn?: boolean;
   onShowClaudeModal?: () => void;
+  onViewModeChange?: () => void;
 }
 
 function getPermissionsSummary(permissions: DefaultPermissions): string {
@@ -75,7 +76,15 @@ function getPermissionsSummary(permissions: DefaultPermissions): string {
   return parts.join("; ");
 }
 
-export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, onToggleSidebar, claudeLoggedIn, onShowClaudeModal }: ChatListProps) {
+export default function ChatList({
+  activeChatId,
+  onRefresh,
+  sidebarCollapsed,
+  onToggleSidebar,
+  claudeLoggedIn,
+  onShowClaudeModal,
+  onViewModeChange,
+}: ChatListProps) {
   const { activeSessions } = useSessionContext();
   const [chats, setChats] = useState<Chat[]>([]);
   const [hasMore, setHasMore] = useState(false);
@@ -580,6 +589,48 @@ export default function ChatList({ activeChatId, onRefresh, sidebarCollapsed, on
           {instanceName && <div style={{ fontSize: 10, color: "var(--chatlist-subtitle-text)", fontWeight: 400, letterSpacing: 0.3 }}>{instanceName}</div>}
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          {onViewModeChange && (
+            <div style={{ display: "flex" }}>
+              <button
+                onClick={onViewModeChange}
+                style={{
+                  background: "var(--bg-secondary)",
+                  color: "var(--chatlist-icon-nav)",
+                  padding: "10px",
+                  borderTopLeftRadius: 8,
+                  borderBottomLeftRadius: 8,
+                  borderTopRightRadius: 0,
+                  borderBottomRightRadius: 0,
+                  border: "1px solid var(--chatlist-item-border)",
+                  borderRight: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                title="Switch to folders view"
+              >
+                <FolderOpen size={18} />
+              </button>
+              <button
+                style={{
+                  background: "var(--accent)",
+                  color: "var(--chatlist-icon-nav-active)",
+                  padding: "10px",
+                  borderTopLeftRadius: 0,
+                  borderBottomLeftRadius: 0,
+                  borderTopRightRadius: 8,
+                  borderBottomRightRadius: 8,
+                  border: "none",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                title="Chats view (active)"
+              >
+                <List size={18} />
+              </button>
+            </div>
+          )}
           <button
             onClick={() => setShowNew(!showNew)}
             style={{

@@ -563,6 +563,8 @@ interface SendMessageOptions {
   agentAlias?: string;
   /** Whether this chat was triggered by an automated system (cron, trigger, heartbeat, etc.) */
   triggered?: boolean;
+  /** How this chat was triggered — stored in metadata for icon distinction */
+  triggeredBy?: "cron" | "event" | "trigger" | "tool";
 }
 
 /**
@@ -613,6 +615,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
       ...(defaultPermissions && { defaultPermissions }),
       ...(opts.agentAlias && { agentAlias: opts.agentAlias }),
       ...(opts.triggered && { triggered: true }),
+      ...(opts.triggeredBy && { triggeredBy: opts.triggeredBy }),
     };
     // Record initial branch for drift detection on subsequent messages
     const gitInfo = getGitInfo(folder);
