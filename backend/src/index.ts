@@ -56,6 +56,7 @@ import { loginHandler, logoutHandler, checkAuthHandler, requireAuth, changePassw
 import { createLogger } from "./utils/logger.js";
 import { initScheduler, shutdownScheduler } from "./services/cron-scheduler.js";
 import { initEventWatchers, shutdownEventWatchers } from "./services/event-watcher.js";
+import { shutdownDebounce } from "./services/trigger-debounce.js";
 import { initCliWatcher, shutdownCliWatcher } from "./services/cli-watcher.js";
 import { LocalProxy } from "./services/local-proxy.js";
 import {
@@ -539,6 +540,7 @@ app.listen(PORT, () => {
 async function gracefulShutdown(signal: string) {
   log.info(`${signal} received, shutting down gracefully`);
   shutdownScheduler();
+  shutdownDebounce();
   shutdownEventWatchers();
   shutdownCliWatcher();
 
