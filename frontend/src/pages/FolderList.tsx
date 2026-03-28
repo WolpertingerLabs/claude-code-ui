@@ -5,7 +5,7 @@ import { listFolders, type FolderSummary } from "../api";
 import { useSessionContext } from "../contexts/SessionContext";
 import FolderListItem from "../components/FolderListItem";
 import ConfirmModal from "../components/ConfirmModal";
-import { getFolderMaxAgeDays, saveFolderMaxAgeDays } from "../utils/localStorage";
+import { getFolderMaxAgeDays, saveFolderMaxAgeDays, getDefaultPermissions } from "../utils/localStorage";
 
 interface FolderListProps {
   activeChatId?: string;
@@ -90,7 +90,9 @@ export default function FolderList({
     if (folder.status === "waiting") {
       setConfirmModal({ isOpen: true, folder: folder.folder });
     } else {
-      navigate(`/chat/new?folder=${encodeURIComponent(folder.folder)}`);
+      navigate(`/chat/new?folder=${encodeURIComponent(folder.folder)}`, {
+        state: { defaultPermissions: getDefaultPermissions() },
+      });
     }
   };
 
@@ -321,7 +323,11 @@ export default function FolderList({
       <ConfirmModal
         isOpen={confirmModal.isOpen}
         onClose={() => setConfirmModal({ isOpen: false, folder: "" })}
-        onConfirm={() => navigate(`/chat/new?folder=${encodeURIComponent(confirmModal.folder)}`)}
+        onConfirm={() =>
+          navigate(`/chat/new?folder=${encodeURIComponent(confirmModal.folder)}`, {
+            state: { defaultPermissions: getDefaultPermissions() },
+          })
+        }
         title="Chat waiting for input"
         message="A chat in this folder is waiting for your input. Start a new chat anyway?"
         confirmText="Start new chat"
