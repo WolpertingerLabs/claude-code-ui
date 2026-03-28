@@ -6,6 +6,8 @@ import type {
   Chat,
   ParsedMessage,
   ChatListResponse,
+  FolderSummary,
+  FolderListResponse,
   PermissionLevel,
   DefaultPermissions,
   StoredImage,
@@ -49,6 +51,8 @@ export type {
   Chat,
   ParsedMessage,
   ChatListResponse,
+  FolderSummary,
+  FolderListResponse,
   PermissionLevel,
   DefaultPermissions,
   StoredImage,
@@ -110,6 +114,14 @@ export async function listChats(
 
   const res = await fetch(`${BASE}/chats${params.toString() ? `?${params}` : ""}`);
   await assertOk(res, "Failed to list chats");
+  return res.json();
+}
+
+export async function listFolders(maxAgeDays?: number): Promise<FolderListResponse> {
+  const params = new URLSearchParams();
+  if (maxAgeDays !== undefined) params.append("maxAgeDays", maxAgeDays.toString());
+  const res = await fetch(`${BASE}/chats/folders${params.toString() ? `?${params}` : ""}`);
+  await assertOk(res, "Failed to list folders");
   return res.json();
 }
 

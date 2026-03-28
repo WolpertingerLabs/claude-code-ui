@@ -2,9 +2,18 @@ export type { PermissionLevel, DefaultPermissions } from "./permissions.js";
 
 export type { PluginCommand, PluginManifest, Plugin } from "./plugins.js";
 
-export type { AppPlugin, McpServerConfig, PluginScanRoot, AppPluginsData, ScanResult, PluginHookEntry, PluginHookMatcher, PluginHooksConfig } from "./appPlugins.js";
+export type {
+  AppPlugin,
+  McpServerConfig,
+  PluginScanRoot,
+  AppPluginsData,
+  ScanResult,
+  PluginHookEntry,
+  PluginHookMatcher,
+  PluginHooksConfig,
+} from "./appPlugins.js";
 
-export type { Chat, ChatListResponse } from "./chat.js";
+export type { Chat, ChatListResponse, FolderSummary, FolderListResponse } from "./chat.js";
 
 export type { ParsedMessage } from "./message.js";
 

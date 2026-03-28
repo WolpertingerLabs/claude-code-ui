@@ -25,3 +25,30 @@ export interface ChatListResponse {
   total: number;
   stale?: boolean;
 }
+
+export interface FolderSummary {
+  /** Actual folder path (worktrees stay separate) */
+  folder: string;
+  /** Last path segment for display */
+  displayName: string;
+  /** ID of the most recently created chat in this folder */
+  mostRecentChatId: string;
+  /** When the most recent chat was created (ISO) */
+  mostRecentChatCreatedAt: string;
+  /** Latest updated_at across all chats in this folder (ISO) */
+  lastUpdatedAt: string;
+  /** Folder status based on most recent chat */
+  status: "ongoing" | "waiting" | "stopped";
+  isGitRepo: boolean;
+  gitBranch?: string;
+  /** Whether the most recent chat was triggered */
+  isTriggered: boolean;
+  /** How the most recent chat was triggered (for icon distinction) */
+  triggeredBy?: "cron" | "event" | "trigger" | "tool";
+  /** Total number of chats in this folder */
+  chatCount: number;
+}
+
+export interface FolderListResponse {
+  folders: FolderSummary[];
+}
