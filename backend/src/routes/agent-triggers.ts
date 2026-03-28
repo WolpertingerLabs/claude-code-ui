@@ -6,7 +6,7 @@ import { listTriggers, getTrigger, createTrigger, updateTrigger, deleteTrigger }
 import { backtestFilter } from "../services/trigger-dispatcher.js";
 import { getAllEvents } from "../services/event-log.js";
 import { resolveAgentKeyAlias } from "../services/agent-settings.js";
-import type { Trigger, TriggerFilter, CronAction, QuietHours } from "shared";
+import type { Trigger, TriggerDebounce, TriggerFilter, CronAction, QuietHours } from "shared";
 
 export const agentTriggersRouter = Router({ mergeParams: true });
 
@@ -18,6 +18,28 @@ function validateQuietHours(qh: QuietHours | undefined): string | null {
   if (qh.enabled) {
     if (!TIME_REGEX.test(qh.start) || !TIME_REGEX.test(qh.end)) {
       return "quietHours start/end must be in HH:MM format (00:00 - 23:59)";
+    }
+  }
+  return null;
+}
+
+function validateDebounce(debounce: TriggerDebounce | undefined): string | null {
+  if (!debounce) return null;
+  if (typeof debounce.enabled !== "boolean") return "debounce.enabled must be a boolean";
+  if (debounce.enabled) {
+    if (typeof debounce.windowMs !== "number" || !Number.isInteger(debounce.windowMs)) {
+      return "debounce.windowMs must be an integer";
+    }
+    if (debounce.windowMs < 100 || debounce.windowMs > 300_000) {
+      return "debounce.windowMs must be between 100 and 300000 (5 minutes)";
+    }
+    if (debounce.maxWaitMs != null) {
+      if (typeof debounce.maxWaitMs !== "number" || !Number.isInteger(debounce.maxWaitMs)) {
+        return "debounce.maxWaitMs must be an integer";
+      }
+      if (debounce.maxWaitMs < debounce.windowMs) {
+        return "debounce.maxWaitMs must be >= debounce.windowMs";
+      }
     }
   }
   return null;
@@ -95,7 +117,7 @@ agentTriggersRouter.post("/", (req: Request, res: Response): void => {
     return;
   }
 
-  const { name, description, filter, action, status, quietHours } = req.body as Partial<Trigger>;
+  const { name, description, filter, action, status, quietHours, debounce } = req.body as Partial<Trigger>;
 
   if (!name || !filter) {
     res.status(400).json({ error: "name and filter are required" });
@@ -105,6 +127,12 @@ agentTriggersRouter.post("/", (req: Request, res: Response): void => {
   const qhError = validateQuietHours(quietHours);
   if (qhError) {
     res.status(400).json({ error: qhError });
+    return;
+  }
+
+  const dbError = validateDebounce(debounce);
+  if (dbError) {
+    res.status(400).json({ error: dbError });
     return;
   }
 
@@ -118,6 +146,7 @@ agentTriggersRouter.post("/", (req: Request, res: Response): void => {
     action: cronAction,
     triggerCount: 0,
     ...(quietHours && { quietHours }),
+    ...(debounce && { debounce }),
   });
 
   appendActivity(alias, {
@@ -144,6 +173,12 @@ agentTriggersRouter.put("/:triggerId", (req: Request, res: Response): void => {
   const qhError = validateQuietHours(updates.quietHours);
   if (qhError) {
     res.status(400).json({ error: qhError });
+    return;
+  }
+
+  const dbError = validateDebounce(updates.debounce);
+  if (dbError) {
+    res.status(400).json({ error: dbError });
     return;
   }
 

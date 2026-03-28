@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from "react";
 // useOutletContext removed — agent is now passed as a prop
-import { Plus, Zap, Play, Pause, Trash2, X, Search, ChevronDown, ChevronRight, Info, Pencil, Moon } from "lucide-react";
+import { Plus, Zap, Play, Pause, Trash2, X, Search, ChevronDown, ChevronRight, Info, Pencil, Moon, Timer } from "lucide-react";
 import ModalOverlay from "../../../components/ModalOverlay";
 import { useIsMobile } from "../../../hooks/useIsMobile";
 import { getAgentTriggers, createAgentTrigger, updateAgentTrigger, deleteAgentTrigger, backtestTriggerFilter, getProxyEvents } from "../../../api";
@@ -38,6 +38,9 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
   const [formQHEnabled, setFormQHEnabled] = useState(false);
   const [formQHStart, setFormQHStart] = useState("22:00");
   const [formQHEnd, setFormQHEnd] = useState("07:00");
+  const [formDebounceEnabled, setFormDebounceEnabled] = useState(false);
+  const [formDebounceWindow, setFormDebounceWindow] = useState(5); // seconds
+  const [formDebounceMaxWait, setFormDebounceMaxWait] = useState<number | "">(""); // seconds, empty = no ceiling
   const [formSaving, setFormSaving] = useState(false);
 
   // Backtest state
@@ -112,6 +115,13 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
         action: { type: "start_session", prompt: formPrompt.trim() || undefined },
         triggerCount: 0,
         ...(formQHEnabled && { quietHours: { enabled: true, start: formQHStart, end: formQHEnd } }),
+        ...(formDebounceEnabled && {
+          debounce: {
+            enabled: true,
+            windowMs: formDebounceWindow * 1000,
+            ...(formDebounceMaxWait !== "" && { maxWaitMs: formDebounceMaxWait * 1000 }),
+          },
+        }),
       });
       setTriggers((prev) => [...prev, trigger]);
       setShowForm(false);
@@ -133,6 +143,9 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
     setFormQHEnabled(false);
     setFormQHStart("22:00");
     setFormQHEnd("07:00");
+    setFormDebounceEnabled(false);
+    setFormDebounceWindow(5);
+    setFormDebounceMaxWait("");
     setBacktestResults(null);
     setEditingTriggerId(null);
   };
@@ -162,6 +175,9 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
         filter: buildFilter(),
         action: { type: "start_session", prompt: formPrompt.trim() || undefined },
         quietHours: formQHEnabled ? { enabled: true, start: formQHStart, end: formQHEnd } : { enabled: false, start: formQHStart, end: formQHEnd },
+        debounce: formDebounceEnabled
+          ? { enabled: true, windowMs: formDebounceWindow * 1000, ...(formDebounceMaxWait !== "" && { maxWaitMs: formDebounceMaxWait * 1000 }) }
+          : { enabled: false, windowMs: 5000 },
       });
       setTriggers((prev) => prev.map((t) => (t.id === editingTriggerId ? updated : t)));
       setShowForm(false);
@@ -184,6 +200,9 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
     setFormQHEnabled(trigger.quietHours?.enabled || false);
     setFormQHStart(trigger.quietHours?.start || "22:00");
     setFormQHEnd(trigger.quietHours?.end || "07:00");
+    setFormDebounceEnabled(trigger.debounce?.enabled || false);
+    setFormDebounceWindow(trigger.debounce?.windowMs ? trigger.debounce.windowMs / 1000 : 5);
+    setFormDebounceMaxWait(trigger.debounce?.maxWaitMs ? trigger.debounce.maxWaitMs / 1000 : "");
     setBacktestResults(null);
     setShowForm(true);
 
@@ -489,6 +508,51 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
             )}
           </div>
 
+          {/* Debounce */}
+          <div style={{ borderTop: "1px solid var(--border)", paddingTop: 14 }}>
+            <label style={{ display: "flex", alignItems: "center", gap: 8, cursor: "pointer" }}>
+              <input
+                type="checkbox"
+                checked={formDebounceEnabled}
+                onChange={(e) => setFormDebounceEnabled(e.target.checked)}
+                style={{ width: 16, height: 16 }}
+              />
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Debounce</span>
+              <span style={{ fontSize: 12, color: "var(--text-muted)" }}>— batch rapid events into a single session</span>
+            </label>
+            {formDebounceEnabled && (
+              <div style={{ display: "flex", gap: 10, marginTop: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>Window (seconds)</label>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={300}
+                    step={0.1}
+                    value={formDebounceWindow}
+                    onChange={(e) => setFormDebounceWindow(Number(e.target.value))}
+                    style={inputStyle}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <label style={{ fontSize: 12, fontWeight: 500, color: "var(--text-muted)", marginBottom: 4, display: "block" }}>
+                    Max wait (seconds, optional)
+                  </label>
+                  <input
+                    type="number"
+                    min={0.1}
+                    max={300}
+                    step={0.1}
+                    value={formDebounceMaxWait}
+                    onChange={(e) => setFormDebounceMaxWait(e.target.value === "" ? "" : Number(e.target.value))}
+                    placeholder="No ceiling"
+                    style={inputStyle}
+                  />
+                </div>
+              </div>
+            )}
+          </div>
+
           {/* Actions row */}
           <div style={{ display: "flex", gap: 10, justifyContent: "space-between", alignItems: "center", flexWrap: "wrap" }}>
             {/* Backtest button */}
@@ -736,6 +800,25 @@ export default function Triggers({ agent }: { agent: AgentConfig }) {
                     <Moon size={12} />
                     <span>
                       Quiet {trigger.quietHours.start} – {trigger.quietHours.end}
+                    </span>
+                  </div>
+                )}
+
+                {/* Debounce indicator */}
+                {trigger.debounce?.enabled && (
+                  <div
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 5,
+                      fontSize: 12,
+                      color: "var(--text-muted)",
+                      marginBottom: 6,
+                    }}
+                  >
+                    <Timer size={12} />
+                    <span>
+                      Debounce {trigger.debounce.windowMs / 1000}s{trigger.debounce.maxWaitMs ? ` (max ${trigger.debounce.maxWaitMs / 1000}s)` : ""}
                     </span>
                   </div>
                 )}

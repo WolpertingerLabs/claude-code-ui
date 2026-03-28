@@ -66,6 +66,12 @@ export interface TriggerFilter {
   conditions?: FilterCondition[]; // Data field conditions (AND logic)
 }
 
+export interface TriggerDebounce {
+  enabled: boolean;
+  windowMs: number; // Debounce timeout in milliseconds (e.g., 5000 = 5s)
+  maxWaitMs?: number; // Optional ceiling — force-fire after this long even if events keep arriving
+}
+
 export interface Trigger {
   id: string;
   name: string;
@@ -76,6 +82,7 @@ export interface Trigger {
   lastTriggered?: number;
   triggerCount: number;
   quietHours?: QuietHours;
+  debounce?: TriggerDebounce;
 }
 
 // ── Activity Log ──────────────────────────────────────

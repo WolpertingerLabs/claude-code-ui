@@ -10,6 +10,7 @@
 import { listAgents } from "./agent-file-service.js";
 import { listTriggers, updateTrigger } from "./agent-triggers.js";
 import { executeAgent } from "./agent-executor.js";
+import { enqueueEvent } from "./trigger-debounce.js";
 import { appendActivity } from "./agent-activity.js";
 import { isInQuietHours } from "../utils/quiet-hours.js";
 import { createLogger } from "../utils/logger.js";
@@ -54,6 +55,12 @@ export function dispatchEvent(event: StoredEvent): void {
       }
 
       log.info(`Trigger "${trigger.name}" (${trigger.id}) matched event ${event.source}:${event.eventType} for agent ${agent.alias}`);
+
+      // If debounce is enabled, buffer instead of immediate dispatch
+      if (trigger.debounce?.enabled && trigger.debounce.windowMs > 0) {
+        enqueueEvent(agent.alias, trigger, event);
+        continue;
+      }
 
       // Update trigger stats
       updateTrigger(agent.alias, trigger.id, {
