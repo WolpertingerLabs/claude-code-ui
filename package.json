@@ -1,6 +1,6 @@
 {
   "name": "@wolpertingerlabs/callboard",
-  "version": "1.0.0-alpha.11.1",
+  "version": "1.0.0-alpha.12.0",
   "description": "A web-based control panel for managing Claude Code sessions, autonomous agents, and multi-agent workflows",
   "license": "MIT",
   "type": "module",
@@ -85,7 +85,7 @@
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.32",
-    "@wolpertingerlabs/drawlatch": "^1.0.0-alpha.10.0",
+    "@wolpertingerlabs/drawlatch": "^1.0.0-alpha.12.0",
     "adm-zip": "^0.5.16",
     "archiver": "^7.0.1",
     "cookie-parser": "^1.4.7",
@@ -106,6 +106,7 @@
     "eslint-plugin-react": "^7.37.5",
     "eslint-plugin-react-hooks": "^7.0.1",
     "prettier": "^3.8.1",
+    "rollup": "^4.60.1",
     "swagger-autogen": "^2.23.7",
     "tsx": "^4.21.0",
     "typescript": "^5.9.3",
