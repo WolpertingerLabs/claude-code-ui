@@ -1,8 +1,79 @@
 import { statSync, existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
+import { execSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
 
 export const CLAUDE_PROJECTS_DIR = join(homedir(), ".claude", "projects");
+
+// ── Claude Binary Resolution ────────────────────────────────────────
+
+/**
+ * Cached absolute path to the `claude` CLI binary.
+ * Resolved once on first call, then reused for the lifetime of the process.
+ */
+let _claudeBinaryPath: string | null = null;
+
+/**
+ * Well-known locations where `claude` might be installed, checked as a
+ * fallback when `which` / `command -v` can't find it (e.g. non-login
+ * shell environments that don't source the user's profile).
+ */
+const CLAUDE_BINARY_SEARCH_PATHS = [
+  join(homedir(), ".local", "bin", "claude"),
+  join(homedir(), ".claude", "bin", "claude"),
+  "/usr/local/bin/claude",
+  "/usr/bin/claude",
+  "/opt/homebrew/bin/claude",
+];
+
+/**
+ * Resolve the absolute path to the `claude` CLI binary.
+ *
+ * Resolution order:
+ * 1. `CLAUDE_BINARY` environment variable (explicit override)
+ * 2. `which claude` (respects the user's PATH)
+ * 3. Well-known install locations (handles non-login shells, daemons, etc.)
+ * 4. Falls back to the bare name `"claude"` so execSync still gets a
+ *    chance to find it through its own PATH lookup.
+ *
+ * The result is cached for the lifetime of the process.
+ */
+export function getClaudeBinaryPath(): string {
+  if (_claudeBinaryPath !== null) return _claudeBinaryPath;
+
+  // 1. Explicit override via environment variable
+  if (process.env.CLAUDE_BINARY) {
+    _claudeBinaryPath = process.env.CLAUDE_BINARY;
+    return _claudeBinaryPath;
+  }
+
+  // 2. Ask the shell — works for login/interactive shells
+  try {
+    const resolved = execSync("which claude", {
+      timeout: 3_000,
+      encoding: "utf-8",
+      stdio: ["pipe", "pipe", "pipe"],
+    }).trim();
+    if (resolved) {
+      _claudeBinaryPath = resolved;
+      return _claudeBinaryPath;
+    }
+  } catch {
+    // `which` failed — claude not on PATH (or `which` not available)
+  }
+
+  // 3. Probe well-known install locations
+  for (const candidate of CLAUDE_BINARY_SEARCH_PATHS) {
+    if (existsSync(candidate)) {
+      _claudeBinaryPath = candidate;
+      return _claudeBinaryPath;
+    }
+  }
+
+  // 4. Bare fallback — let the OS resolve it at exec time
+  _claudeBinaryPath = "claude";
+  return _claudeBinaryPath;
+}
 
 /**
  * Absolute path to the Callboard data directory.

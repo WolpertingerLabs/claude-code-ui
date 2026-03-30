@@ -12,7 +12,7 @@ const __pkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..
 // Load .env: ~/.callboard/.env is the base config, then the project-root .env
 // overrides it. This lets local dev runs use a local .env to override
 // the global ~/.callboard config (e.g. different ports, passwords, log levels).
-import { DATA_DIR, ENV_FILE, ensureDataDir, ensureEnvFile, ensureInstanceName } from "./utils/paths.js";
+import { DATA_DIR, ENV_FILE, ensureDataDir, ensureEnvFile, ensureInstanceName, getClaudeBinaryPath } from "./utils/paths.js";
 ensureDataDir();
 const __isFirstRun = ensureEnvFile();
 migrateDrawlatchDirs();
@@ -244,7 +244,7 @@ app.get(
     }
 
     try {
-      const raw = execSync("claude auth status", { timeout: 1_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
+      const raw = execSync(`${getClaudeBinaryPath()} auth status`, { timeout: 1_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] });
       const parsed = JSON.parse(raw.trim());
       if (parsed.loggedIn) claudeStatusCache = { data: parsed, ts: now };
       res.json(parsed);
@@ -285,7 +285,7 @@ app.get(
 
     let claudeCliVersion = "unknown";
     try {
-      claudeCliVersion = execSync("claude --version", { timeout: 5_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
+      claudeCliVersion = execSync(`${getClaudeBinaryPath()} --version`, { timeout: 5_000, encoding: "utf-8", stdio: ["pipe", "pipe", "pipe"] }).trim();
     } catch {
       // ignore
     }
@@ -339,6 +339,7 @@ app.get(
       platform: `${process.platform} (${process.arch})`,
       sdkVersion,
       claudeCliVersion,
+      claudeCliBinary: getClaudeBinaryPath(),
       proxyMode: process.env.MCP_PROXY_MODE || undefined,
       environment: process.env.NODE_ENV || "development",
       account: sdkInfo.account || undefined,
