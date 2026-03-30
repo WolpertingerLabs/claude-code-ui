@@ -1,8 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import { useNavigate, useLocation } from "react-router-dom";
-import { Plus, Settings, Bot, PanelLeftClose, PanelLeftOpen, ChevronDown, ChevronRight, AlertTriangle, FileText, FolderOpen, List } from "lucide-react";
-import { listChats, deleteChat, toggleBookmark, fetchInstanceName, getDrafts, deleteDraft, type Chat, type QueueItem } from "../api";
+import { Plus, Settings, Bot, PanelLeftOpen, ChevronDown, ChevronRight, AlertTriangle, FileText } from "lucide-react";
+import { listChats, deleteChat, toggleBookmark, getDrafts, deleteDraft, type Chat, type QueueItem } from "../api";
 import { useSessionContext } from "../contexts/SessionContext";
+import SidebarHeader from "../components/SidebarHeader";
 import ChatListItem from "../components/ChatListItem";
 import DraftListItem from "../components/DraftListItem";
 import ChatFilterBar from "../components/ChatFilterBar";
@@ -47,7 +48,6 @@ export default function ChatList({
     chatName: "",
   });
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const [instanceName, setInstanceName] = useState("");
   const navigate = useNavigate();
   const location = useLocation();
   const isSettingsActive = location.pathname === "/settings";
@@ -156,15 +156,6 @@ export default function ChatList({
       loadDrafts();
     });
   }, [onRefresh, load, loadDrafts]);
-
-  useEffect(() => {
-    fetchInstanceName()
-      .then((name) => {
-        setInstanceName(name);
-        document.title = `Callboard / ${name}`;
-      })
-      .catch(() => {});
-  }, []);
 
   // Refetch chat list when sessions start or stop (debounced to avoid rapid-fire
   // during new-chat migration: temp ID stop → real ID start).
@@ -449,156 +440,14 @@ export default function ChatList({
 
   return (
     <div style={{ height: "100%", display: "flex", flexDirection: "column" }}>
-      <header
-        style={{
-          padding: "16px 20px",
-          borderBottom: "1px solid var(--chatlist-header-border)",
-          background: "var(--chatlist-header-bg)",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-        }}
-      >
-        <div>
-          <h1 style={{ fontSize: 20, fontWeight: 600, marginBottom: 1, color: "var(--chatlist-title-text)" }}>Callboard</h1>
-          {instanceName && <div style={{ fontSize: 10, color: "var(--chatlist-subtitle-text)", fontWeight: 400, letterSpacing: 0.3 }}>{instanceName}</div>}
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: 4 }}>
-          <button
-            onClick={() => setShowNew(!showNew)}
-            style={{
-              background: "var(--accent)",
-              color: "var(--text-on-accent)",
-              padding: "6px",
-              borderRadius: 6,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-            }}
-            title="New Chat"
-          >
-            <Plus size={16} />
-          </button>
-          {onViewModeChange && (
-            <div style={{ display: "flex" }}>
-              <button
-                onClick={onViewModeChange}
-                style={{
-                  background: "var(--bg-secondary)",
-                  color: "var(--chatlist-icon-nav)",
-                  padding: "6px",
-                  borderTopLeftRadius: 6,
-                  borderBottomLeftRadius: 6,
-                  borderTopRightRadius: 0,
-                  borderBottomRightRadius: 0,
-                  border: "1px solid var(--chatlist-item-border)",
-                  borderRight: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                title="Switch to folders view"
-              >
-                <FolderOpen size={16} />
-              </button>
-              <button
-                style={{
-                  background: "var(--accent)",
-                  color: "var(--chatlist-icon-nav-active)",
-                  padding: "6px",
-                  borderTopLeftRadius: 0,
-                  borderBottomLeftRadius: 0,
-                  borderTopRightRadius: 6,
-                  borderBottomRightRadius: 6,
-                  border: "none",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-                title="Chats view (active)"
-              >
-                <List size={16} />
-              </button>
-            </div>
-          )}
-          <div style={{ display: "flex" }}>
-            <button
-              onClick={() => navigate("/agents")}
-              style={{
-                background: isAgentsActive ? "var(--accent)" : "var(--bg-secondary)",
-                color: isAgentsActive ? "var(--chatlist-icon-nav-active)" : "var(--chatlist-icon-nav)",
-                padding: "6px",
-                borderTopLeftRadius: 6,
-                borderBottomLeftRadius: 6,
-                borderTopRightRadius: 0,
-                borderBottomRightRadius: 0,
-                border: isAgentsActive ? "none" : "1px solid var(--chatlist-item-border)",
-                borderRight: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Agents"
-            >
-              <Bot size={16} />
-            </button>
-            <button
-              onClick={() => navigate("/settings")}
-              style={{
-                background: isSettingsActive ? "var(--accent)" : "var(--bg-secondary)",
-                color: isSettingsActive ? "var(--chatlist-icon-nav-active)" : "var(--chatlist-icon-nav)",
-                padding: "6px",
-                borderTopLeftRadius: 0,
-                borderBottomLeftRadius: 0,
-                borderTopRightRadius: 6,
-                borderBottomRightRadius: 6,
-                border: isSettingsActive ? "none" : "1px solid var(--chatlist-item-border)",
-                borderLeft: "none",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Settings"
-            >
-              <Settings size={16} />
-            </button>
-          </div>
-          {claudeLoggedIn === false && onShowClaudeModal && (
-            <button
-              onClick={onShowClaudeModal}
-              style={{
-                background: "var(--warning-bg)",
-                color: "var(--warning)",
-                padding: "6px",
-                borderRadius: 6,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Claude Code login required"
-            >
-              <AlertTriangle size={16} />
-            </button>
-          )}
-          {onToggleSidebar && (
-            <button
-              onClick={onToggleSidebar}
-              style={{
-                background: "transparent",
-                color: "var(--chatlist-icon)",
-                padding: "6px",
-                borderRadius: 6,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="Collapse sidebar"
-            >
-              <PanelLeftClose size={16} />
-            </button>
-          )}
-        </div>
-      </header>
+      <SidebarHeader
+        viewMode="chats"
+        onToggleNew={() => setShowNew(!showNew)}
+        onViewModeChange={onViewModeChange}
+        claudeLoggedIn={claudeLoggedIn}
+        onShowClaudeModal={onShowClaudeModal}
+        onToggleSidebar={onToggleSidebar}
+      />
 
       <ChatFilterBar
         bookmarkFilter={bookmarkFilter}
