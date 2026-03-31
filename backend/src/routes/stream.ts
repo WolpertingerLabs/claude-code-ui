@@ -9,7 +9,7 @@ import { getGitInfo, resolveBranch } from "../utils/git.js";
 import { chatFileService } from "../services/chat-file-service.js";
 import { findSessionLogPath } from "../utils/session-log.js";
 import { findChatForStatus } from "../utils/chat-lookup.js";
-import { writeSSEHeaders, sendSSE, createSSEHandler } from "../utils/sse.js";
+import { writeSSEHeaders, sendSSE, createSSEHandler, startSSEHeartbeat } from "../utils/sse.js";
 import { createLogger } from "../utils/logger.js";
 import { generateBranchName } from "../services/quick-completion.js";
 
@@ -264,10 +264,12 @@ streamRouter.get("/:id/stream", (req, res) => {
 
   // If there's an active web session, connect to it
   if (session) {
+    const stopHeartbeat = startSSEHeartbeat(res);
     const onEvent = createSSEHandler(res, session.emitter);
     session.emitter.on("event", onEvent);
 
     req.on("close", () => {
+      stopHeartbeat();
       session.emitter.removeListener("event", onEvent);
     });
     return;
@@ -327,6 +329,8 @@ streamRouter.get("/:id/stream", (req, res) => {
     lastPosition = freshStats.size;
   } catch {}
 
+  const stopHeartbeat = startSSEHeartbeat(res);
+
   // Track last activity time for inactivity timeout
   let lastActivityTime = Date.now();
   const CLI_INACTIVITY_TIMEOUT_MS = 300_000; // 5 minutes
@@ -358,6 +362,7 @@ streamRouter.get("/:id/stream", (req, res) => {
             if (parsed.type === "summary" || parsed.message?.stop_reason) {
               sendSSE(res, { type: "message_complete" });
               // Session is done — clean up and close
+              stopHeartbeat();
               unwatchFile(logPath, watchHandler);
               clearInterval(subagentScanInterval);
               clearInterval(inactivityCheckInterval);
@@ -408,6 +413,7 @@ streamRouter.get("/:id/stream", (req, res) => {
   const inactivityCheckInterval = setInterval(() => {
     if (Date.now() - lastActivityTime > CLI_INACTIVITY_TIMEOUT_MS) {
       sendSSE(res, { type: "message_complete" });
+      stopHeartbeat();
       unwatchFile(logPath, watchHandler);
       clearInterval(subagentScanInterval);
       clearInterval(inactivityCheckInterval);
@@ -416,6 +422,7 @@ streamRouter.get("/:id/stream", (req, res) => {
   }, 5000);
 
   req.on("close", () => {
+    stopHeartbeat();
     unwatchFile(logPath, watchHandler);
     clearInterval(subagentScanInterval);
     clearInterval(inactivityCheckInterval);

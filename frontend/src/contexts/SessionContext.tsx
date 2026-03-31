@@ -86,6 +86,7 @@ export function SessionProvider({ children }: { children: ReactNode }) {
   const lastMetaVersionRef = useRef<number | undefined>(undefined);
   const consecutiveFailuresRef = useRef(0);
   const connectedRef = useRef(false);
+  const pollRef = useRef<() => Promise<void>>();
 
   useEffect(() => {
     let mounted = true;
@@ -155,13 +156,33 @@ export function SessionProvider({ children }: { children: ReactNode }) {
       }
     };
 
+    pollRef.current = poll;
+
     // Immediate first poll, then every POLL_INTERVAL_MS
     poll();
     const interval = setInterval(poll, POLL_INTERVAL_MS);
 
+    // On tab resume (or network restore while visible), force an immediate
+    // full poll so downstream consumers get accurate session state without
+    // waiting up to POLL_INTERVAL_MS. Resetting version refs ensures the
+    // server returns full payloads instead of "nothing changed" responses —
+    // the browser may have missed version bumps while the tab was suspended.
+    const handleResume = () => {
+      if (document.visibilityState === "visible") {
+        lastVersionRef.current = undefined;
+        lastMetaVersionRef.current = undefined;
+        pollRef.current?.();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleResume);
+    window.addEventListener("online", handleResume);
+
     return () => {
       mounted = false;
       clearInterval(interval);
+      document.removeEventListener("visibilitychange", handleResume);
+      window.removeEventListener("online", handleResume);
     };
   }, []);
 

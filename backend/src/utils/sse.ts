@@ -26,6 +26,28 @@ export function sendSSE(res: Response, data: Record<string, unknown>): void {
 }
 
 /**
+ * Start a periodic SSE heartbeat (comment line) to keep the connection alive
+ * and allow detection of dead connections on both sides.
+ *
+ * SSE comment lines (`:`) are ignored by EventSource and custom parsers but
+ * keep the TCP socket alive through proxies and cause dead sockets to surface
+ * EPIPE/ECONNRESET — triggering `req.on("close")` for server-side cleanup.
+ *
+ * Returns a cleanup function to stop the heartbeat.
+ */
+export function startSSEHeartbeat(res: Response, intervalMs = 15_000): () => void {
+  const timer = setInterval(() => {
+    try {
+      res.write(":heartbeat\n\n");
+    } catch {
+      clearInterval(timer);
+    }
+  }, intervalMs);
+
+  return () => clearInterval(timer);
+}
+
+/**
  * Create a standard SSE event handler that forwards StreamEvents to the client.
  *
  * Handles: done → message_complete, error → message_error,
