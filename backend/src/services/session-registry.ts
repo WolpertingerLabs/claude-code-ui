@@ -23,6 +23,12 @@ export interface SessionEvent {
   data?: Record<string, unknown>;
 }
 
+export interface SummonInfo {
+  message: string;
+  urgency: "normal" | "urgent";
+  createdAt: string;
+}
+
 /**
  * Centralized registry of all active chat sessions (both web and CLI).
  *
@@ -31,12 +37,50 @@ export interface SessionEvent {
  */
 class SessionRegistry extends EventEmitter {
   private sessions = new Map<string, SessionInfo>();
+  private _version = 0;
+  private _metadataVersion = 0;
+  private _activeSummons = new Map<string, SummonInfo>();
 
   constructor() {
     super();
     // Each SSE client adds a "change" listener, plus the CLI watcher.
     // Raise the limit to avoid spurious warnings with multiple browser tabs.
     this.setMaxListeners(50);
+  }
+
+  /** Session version counter — incremented on register/unregister/migrate */
+  get version(): number {
+    return this._version;
+  }
+
+  /** Metadata version counter — incremented on metadata/summon changes */
+  get metadataVersion(): number {
+    return this._metadataVersion;
+  }
+
+  /** Current active summons (chatId → summon data) */
+  get activeSummons(): Map<string, SummonInfo> {
+    return this._activeSummons;
+  }
+
+  /** Bump metadata version and emit a change event */
+  notifyMetadata(chatId: string, data?: Record<string, unknown>): void {
+    this._metadataVersion++;
+    this.emit("change", { event: "chat_metadata_updated", chatId, data } as SessionEvent);
+  }
+
+  /** Register an active summon for a chat */
+  addSummon(chatId: string, data: SummonInfo): void {
+    this._activeSummons.set(chatId, data);
+    this._metadataVersion++;
+    this.emit("change", { event: "user_summoned", chatId, data: data as unknown as Record<string, unknown> } satisfies SessionEvent);
+  }
+
+  /** Clear summon for a chat */
+  clearSummon(chatId: string): void {
+    if (this._activeSummons.has(chatId)) {
+      this._activeSummons.delete(chatId);
+    }
   }
 
   /**
@@ -59,6 +103,7 @@ class SessionRegistry extends EventEmitter {
       ...info,
     };
     this.sessions.set(chatId, session);
+    this._version++;
     log.debug(`Session registered: chatId=${chatId}, type=${info.type}`);
 
     const event: SessionEvent = { event: "session_started", chatId, type: info.type };
@@ -75,6 +120,7 @@ class SessionRegistry extends EventEmitter {
     if (!session) return false;
 
     this.sessions.delete(chatId);
+    this._version++;
     log.debug(`Session unregistered: chatId=${chatId}, type=${session.type}`);
 
     const event: SessionEvent = { event: "session_stopped", chatId, type: session.type };
@@ -98,6 +144,7 @@ class SessionRegistry extends EventEmitter {
 
     const newSession: SessionInfo = { ...session, chatId: newId };
     this.sessions.set(newId, newSession);
+    this._version++;
 
     log.debug(`Session migrated: ${oldId} → ${newId}`);
 

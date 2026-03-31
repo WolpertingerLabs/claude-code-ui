@@ -105,8 +105,8 @@ const apiLimiter = rateLimit({
   legacyHeaders: false,
   message: { error: "Too many requests, please try again later." },
   skip: (req) => {
-    // Skip rate limiting for SSE endpoints (long-lived connections)
-    return req.path.endsWith("/stream") || req.path.endsWith("/events");
+    // Skip rate limiting for SSE/stream endpoints and high-frequency polling
+    return req.path.endsWith("/stream") || req.path.endsWith("/poll");
   },
 });
 

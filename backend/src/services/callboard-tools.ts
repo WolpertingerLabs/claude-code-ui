@@ -276,11 +276,7 @@ export function buildCallboardToolsServer(getChatId?: () => string) {
           const ok = chatFileService.updateChatMetadata(chatId, fields);
           if (!ok) return error("Chat not found — status may not be available until the session is fully initialized");
 
-          sessionRegistry.emit("change", {
-            event: "chat_metadata_updated",
-            chatId,
-            data: { chatStatus: args.status || null, chatStatusEmoji: args.emoji || null },
-          });
+          sessionRegistry.notifyMetadata(chatId, { chatStatus: args.status || null, chatStatusEmoji: args.emoji || null });
 
           return {
             content: [
@@ -311,18 +307,14 @@ export function buildCallboardToolsServer(getChatId?: () => string) {
 
           const summon = {
             message: args.message,
-            urgency: args.urgency || "normal",
+            urgency: (args.urgency || "normal") as "normal" | "urgent",
             createdAt: new Date().toISOString(),
           };
 
           const ok = chatFileService.updateChatMetadata(chatId, { summon });
           if (!ok) return error("Chat not found — summon may not be available until the session is fully initialized");
 
-          sessionRegistry.emit("change", {
-            event: "user_summoned",
-            chatId,
-            data: summon,
-          });
+          sessionRegistry.addSummon(chatId, summon);
 
           return {
             content: [
@@ -352,11 +344,7 @@ export function buildCallboardToolsServer(getChatId?: () => string) {
           const ok = chatFileService.updateChatMetadata(chatId, { title: args.title || null });
           if (!ok) return error("Chat not found — title may not be available until the session is fully initialized");
 
-          sessionRegistry.emit("change", {
-            event: "chat_metadata_updated",
-            chatId,
-            data: { title: args.title || null },
-          });
+          sessionRegistry.notifyMetadata(chatId, { title: args.title || null });
 
           return {
             content: [
