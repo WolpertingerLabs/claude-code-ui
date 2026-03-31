@@ -1,4 +1,4 @@
-import { statSync, existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync } from "fs";
+import { statSync, existsSync, mkdirSync, writeFileSync, readFileSync, appendFileSync, readdirSync } from "fs";
 import { execSync } from "child_process";
 import { join } from "path";
 import { homedir } from "os";
@@ -315,8 +315,9 @@ function isDirectory(p: string): boolean {
  *
  * Uses a greedy left-to-right algorithm: at each dash boundary, check if
  * treating it as a "/" yields an existing directory. If so, commit the split.
- * Otherwise, keep it as a "-" in the current segment. This is O(n) filesystem
- * checks instead of the previous O(2^n) brute-force approach.
+ * If not, check if treating it as a "." yields a valid directory prefix
+ * (handles periods in intermediate folder names like /path/.callboard/src
+ * or /path/v2.0/src). Otherwise, keep it as a "-" in the current segment.
  *
  * After the initial greedy pass, if the final resolved path doesn't exist,
  * we try replacing dashes with dots in each segment since dots in folder names
@@ -327,7 +328,31 @@ function isDirectory(p: string): boolean {
  */
 export function projectDirToFolder(dirName: string): string {
   // Strip leading dash (represents the root /)
-  const parts = dirName.slice(1).split("-");
+  const rawParts = dirName.slice(1).split("-");
+
+  // Pre-process: merge empty parts (from double-dashes) with the following
+  // non-empty part as a dot-prefixed segment.
+  //
+  // Double-dashes arise when the original path had consecutive non-alphanumeric
+  // characters — most commonly a path separator followed by a dot (hidden dirs):
+  //   /Users/me/.callboard → -Users-me--callboard
+  //
+  // After split("-"): ["Users", "me", "", "callboard"]
+  // After merging:    ["Users", "me", ".callboard"]
+  const parts: string[] = [];
+  let dotPrefix = "";
+  for (const part of rawParts) {
+    if (part === "") {
+      dotPrefix += ".";
+    } else {
+      parts.push(dotPrefix + part);
+      dotPrefix = "";
+    }
+  }
+  // Discard trailing dot accumulator when no non-empty parts were found.
+  // This handles the root case: "-" → rawParts = [""] → parts stays empty → "/".
+  if (dotPrefix && parts.length > 0) parts.push(dotPrefix);
+
   if (parts.length === 0) return "/";
 
   // Build the path greedily from left to right
@@ -342,8 +367,18 @@ export function projectDirToFolder(dirName: string): string {
       resolvedSegments.push(currentSegment);
       currentSegment = parts[i];
     } else {
-      // Keep the dash as a literal "-" in the current segment
-      currentSegment += "-" + parts[i];
+      // Before falling back to dash, check if the dash was originally a dot.
+      // If treating it as "." creates a valid directory prefix, use that.
+      // This handles periods in intermediate directory names (e.g. hidden
+      // dirs like ~/.callboard/ or versioned dirs like /path/v2.0/src).
+      const dotSegment = currentSegment + "." + parts[i];
+      const dotPath = "/" + [...resolvedSegments, dotSegment].join("/");
+      if (isDirectory(dotPath)) {
+        currentSegment = dotSegment;
+      } else {
+        // Keep the dash as a literal "-" in the current segment
+        currentSegment += "-" + parts[i];
+      }
     }
   }
 
@@ -355,16 +390,20 @@ export function projectDirToFolder(dirName: string): string {
   // If the resolved path exists, return it directly
   if (pathExists(resolved)) return resolved;
 
-  // The path doesn't exist — try dot substitutions to recover the original path.
-  // This handles two cases:
+  // The path doesn't exist — the greedy algorithm likely split at a directory
+  // that happened to exist, creating a wrong path. Try two recovery strategies:
   //
-  // Case 1: Dashes within a segment that were originally dots.
-  //   e.g. "repo-name" in the last segment was actually "repo.name"
+  // Strategy 1: Filesystem scan recovery — look at the actual directory listing
+  // of each candidate parent to find an entry whose encoding matches the merged
+  // segments. This handles ALL special characters (periods, dashes, underscores,
+  // spaces, etc.) in a unified way.
   //
-  // Case 2: The greedy algorithm incorrectly split at a coincidental directory,
-  //   creating separate segments that should be joined with dots.
-  //   e.g. ["Users", "foo", "my", "project", "v2"] should be
-  //        ["Users", "foo", "my.project.v2"]
+  // Strategy 2: Dot substitution recovery (legacy) — try replacing dashes with
+  // dots within/across segments. Kept as a fallback for edge cases where scan
+  // recovery can't find a match (e.g. parent directory not readable).
+  const scanFixed = tryScanRecovery(resolvedSegments);
+  if (scanFixed) return scanFixed;
+
   const dotFixed = tryDotRecovery(resolvedSegments);
   if (dotFixed) return dotFixed;
 
@@ -382,6 +421,65 @@ function pathExists(p: string): boolean {
   } catch {
     return false;
   }
+}
+
+/**
+ * Encode a string the same way the Claude SDK does (for comparison purposes).
+ * Replaces all non-alphanumeric characters with dashes.
+ */
+function encodeSegment(s: string): string {
+  return s.replace(/[^a-zA-Z0-9]/g, "-");
+}
+
+/**
+ * Try to recover the original path by scanning the filesystem for real directory
+ * entries whose encoded form matches the merged segments.
+ *
+ * This handles ALL special characters uniformly (periods, dashes, underscores,
+ * spaces, etc.) because it checks what actually exists on disk rather than
+ * guessing which character a dash originally represented.
+ *
+ * Example: segments = ["Users", "me", "WolpertingerLabs", "callboard", "feat-xyz"]
+ *   → greedy split was wrong at "callboard" (it exists as a dir)
+ *   → merge last 2: encoded = "callboard-feat-xyz"
+ *   → scan /Users/me/WolpertingerLabs/ for entry encoding to "callboard-feat-xyz"
+ *   → finds "callboard.feat-xyz" → return "/Users/me/WolpertingerLabs/callboard.feat-xyz"
+ */
+function tryScanRecovery(segments: string[]): string | null {
+  // Try merging the last N segments and scanning the parent for a matching entry.
+  //
+  // mergeCount=1: Handles intra-segment character recovery. The greedy algorithm
+  //   resolved the path structure correctly but a dash within the last segment was
+  //   originally a period, underscore, space, etc.
+  //   e.g. segments = ["home", "user", "my-project"] → scan for "my_project"
+  //
+  // mergeCount>=2: Handles wrong splits. The greedy algorithm incorrectly split
+  //   at an intermediate directory that happened to exist.
+  //   e.g. segments = ["home", "user", "callboard", "feat-xyz"]
+  //        → merge last 2: "callboard-feat-xyz" → scan for "callboard.feat-xyz"
+  for (let mergeCount = 1; mergeCount <= Math.min(segments.length, 6); mergeCount++) {
+    const prefixSegments = segments.slice(0, segments.length - mergeCount);
+    const parentPath = prefixSegments.length > 0 ? "/" + prefixSegments.join("/") : "/";
+
+    if (!isDirectory(parentPath)) continue;
+
+    const mergeSegments = segments.slice(segments.length - mergeCount);
+    const encodedSuffix = mergeSegments.join("-");
+
+    try {
+      const entries = readdirSync(parentPath);
+      for (const entry of entries) {
+        if (encodeSegment(entry) === encodedSuffix) {
+          const candidate = parentPath === "/" ? "/" + entry : parentPath + "/" + entry;
+          if (pathExists(candidate)) return candidate;
+        }
+      }
+    } catch {
+      // Parent directory not readable — skip to next merge count
+    }
+  }
+
+  return null;
 }
 
 /**

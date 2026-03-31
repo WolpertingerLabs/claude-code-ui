@@ -86,8 +86,11 @@ function discoverProjectDirs(targetFolder: string): {
         continue;
       }
 
-      // Resolve the encoded directory name back to a folder path
-      const resolvedFolder = projectDirToFolder(dirName);
+      // Resolve the encoded directory name back to a folder path.
+      // When the encoding matches exactly, use the target folder directly to
+      // avoid the lossy decode (periods, dashes, underscores all become dashes
+      // in the encoding, so the decoder can't always recover the original).
+      const resolvedFolder = dirName === targetEncoded ? targetFolder : projectDirToFolder(dirName);
 
       // Confirm this is either the target folder or a worktree of it
       if (resolvedFolder === targetFolder) {
