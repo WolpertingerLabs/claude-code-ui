@@ -1,4 +1,4 @@
-import { createContext, useContext, useState, useEffect, type ReactNode } from "react";
+import { createContext, useContext, useState, useEffect, useRef, type ReactNode } from "react";
 
 export type SessionType = "web" | "cli";
 
@@ -16,9 +16,9 @@ export interface SummonInfo {
 interface SessionContextValue {
   /** Map of chatId → session info for all currently active sessions */
   activeSessions: Map<string, ActiveSessionInfo>;
-  /** Whether the SSE connection to the server is established */
+  /** Whether the connection to the server is healthy */
   connected: boolean;
-  /** Incremented on chat_metadata_updated / user_summoned SSE events — use as a dependency to trigger refetch */
+  /** Incremented on chat_metadata_updated / user_summoned events — use as a dependency to trigger refetch */
   metadataVersion: number;
   /** Set of chatIds that currently have an active summon (for immediate visual feedback) */
   summonedChatIds: Set<string>;
@@ -50,7 +50,7 @@ export function useIsSessionActive(chatId: string | undefined): ActiveSessionInf
 
 /**
  * Hook to get the metadata version counter. Use as a dependency to trigger
- * refetch when chat metadata changes (status, summon, title) via SSE events.
+ * refetch when chat metadata changes (status, summon, title) via polling.
  */
 export function useMetadataVersion(): number {
   return useSessionContext().metadataVersion;
@@ -63,142 +63,107 @@ export function useSummonedChatIds(): Set<string> {
   return useSessionContext().summonedChatIds;
 }
 
-const RECONNECT_DELAY_MS = 3_000;
+const POLL_INTERVAL_MS = 1_000;
+const FAILURE_THRESHOLD = 3;
 
 /**
- * Provider that maintains a global SSE connection to /api/sessions/events
- * and keeps an in-memory map of all active chat sessions.
+ * Provider that polls /api/sessions/poll every second and keeps an
+ * in-memory map of all active chat sessions.
  *
- * Wrap your app with this provider to give all components access to
- * real-time session status without per-chat polling.
+ * The server returns version counters with each response. When versions
+ * haven't changed, the response is tiny and no state updates occur
+ * (zero re-renders). Full session/summon payloads are only included
+ * when the corresponding version counter has changed.
  */
 export function SessionProvider({ children }: { children: ReactNode }) {
   const [sessions, setSessions] = useState<Map<string, ActiveSessionInfo>>(new Map());
   const [connected, setConnected] = useState(false);
   const [metadataVersion, setMetadataVersion] = useState(0);
   const [summonedChatIds, setSummonedChatIds] = useState<Set<string>>(new Set());
-  // Incrementing this counter triggers a reconnection attempt
-  const [reconnectCount, setReconnectCount] = useState(0);
+
+  // Track server versions and connection state in refs to avoid triggering re-renders on every poll
+  const lastVersionRef = useRef<number | undefined>(undefined);
+  const lastMetaVersionRef = useRef<number | undefined>(undefined);
+  const consecutiveFailuresRef = useRef(0);
+  const connectedRef = useRef(false);
 
   useEffect(() => {
     let mounted = true;
-    let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
-    const es = new EventSource("/api/sessions/events", { withCredentials: true });
-
-    // Handle initial snapshot
-    es.addEventListener("snapshot", (e: MessageEvent) => {
-      if (!mounted) return;
+    const poll = async () => {
       try {
-        const data = JSON.parse(e.data) as Record<string, { type: SessionType; startedAt: number }>;
-        const map = new Map<string, ActiveSessionInfo>();
-        for (const [chatId, info] of Object.entries(data)) {
-          map.set(chatId, { type: info.type, startedAt: info.startedAt });
+        const params = new URLSearchParams();
+        if (lastVersionRef.current !== undefined) params.set("v", String(lastVersionRef.current));
+        if (lastMetaVersionRef.current !== undefined) params.set("mv", String(lastMetaVersionRef.current));
+
+        const res = await fetch(`/api/sessions/poll?${params}`, { credentials: "include" });
+        if (!mounted) return;
+        if (!res.ok) throw new Error(`HTTP ${res.status}`);
+
+        const data = await res.json();
+        if (!mounted) return;
+
+        consecutiveFailuresRef.current = 0;
+        if (!connectedRef.current) {
+          connectedRef.current = true;
+          setConnected(true);
         }
-        setSessions(map);
-        setConnected(true);
-      } catch {
-        // Ignore parse errors
-      }
-    });
 
-    // Handle session started
-    es.addEventListener("session_started", (e: MessageEvent) => {
-      if (!mounted) return;
-      try {
-        const { chatId, type } = JSON.parse(e.data) as { chatId: string; type: SessionType };
-        setSessions((prev) => {
-          const next = new Map(prev);
-          next.set(chatId, { type });
-          return next;
-        });
-      } catch {
-        // Ignore parse errors
-      }
-    });
+        // Sessions changed — rebuild the map
+        if (data.sessions !== undefined && data.version !== lastVersionRef.current) {
+          const map = new Map<string, ActiveSessionInfo>();
+          for (const [chatId, info] of Object.entries(data.sessions)) {
+            map.set(chatId, info as ActiveSessionInfo);
+          }
+          setSessions(map);
+        }
+        lastVersionRef.current = data.version;
 
-    // Handle session stopped
-    es.addEventListener("session_stopped", (e: MessageEvent) => {
-      if (!mounted) return;
-      try {
-        const { chatId } = JSON.parse(e.data) as { chatId: string };
-        setSessions((prev) => {
-          if (!prev.has(chatId)) return prev;
-          const next = new Map(prev);
-          next.delete(chatId);
-          return next;
-        });
-      } catch {
-        // Ignore parse errors
-      }
-    });
+        // Metadata changed — bump local counter and diff summons
+        if (data.metadataVersion !== lastMetaVersionRef.current) {
+          lastMetaVersionRef.current = data.metadataVersion;
+          setMetadataVersion((v) => v + 1);
 
-    // Heartbeat — confirms the connection is alive (no action needed)
-    es.addEventListener("heartbeat", () => {});
+          if (data.activeSummons) {
+            const serverSummons = data.activeSummons as Record<string, SummonInfo>;
+            const newSet = new Set(Object.keys(serverSummons));
 
-    // Chat metadata updated — bump version to trigger refetches
-    es.addEventListener("chat_metadata_updated", (e: MessageEvent) => {
-      if (!mounted) return;
-      try {
-        const { chatId, data } = JSON.parse(e.data) as { chatId: string; data?: { summon?: unknown } };
-        setMetadataVersion((v) => v + 1);
-        // If summon was cleared, remove from summoned set
-        if (data && data.summon === null) {
-          setSummonedChatIds((prev) => {
-            if (!prev.has(chatId)) return prev;
-            const next = new Set(prev);
-            next.delete(chatId);
-            return next;
-          });
+            setSummonedChatIds((prev) => {
+              // Fire browser notifications for newly-appeared summons
+              for (const chatId of newSet) {
+                if (!prev.has(chatId)) {
+                  const summon = serverSummons[chatId];
+                  if (summon?.urgency === "urgent" && typeof Notification !== "undefined" && Notification.permission === "granted") {
+                    new Notification("Agent needs your attention", {
+                      body: summon.message,
+                      tag: `summon-${chatId}`,
+                    });
+                  }
+                }
+              }
+              return newSet;
+            });
+          }
         }
       } catch {
-        // Ignore parse errors
-      }
-    });
-
-    // User summoned — add to summoned set + bump version + browser notification
-    es.addEventListener("user_summoned", (e: MessageEvent) => {
-      if (!mounted) return;
-      try {
-        const { chatId, data } = JSON.parse(e.data) as { chatId: string; data?: SummonInfo };
-        setMetadataVersion((v) => v + 1);
-        setSummonedChatIds((prev) => {
-          const next = new Set(prev);
-          next.add(chatId);
-          return next;
-        });
-        // Browser notification for urgent summons
-        if (data?.urgency === "urgent" && typeof Notification !== "undefined" && Notification.permission === "granted") {
-          new Notification("Agent needs your attention", {
-            body: data.message,
-            tag: `summon-${chatId}`,
-          });
+        if (!mounted) return;
+        consecutiveFailuresRef.current++;
+        if (consecutiveFailuresRef.current >= FAILURE_THRESHOLD && connectedRef.current) {
+          connectedRef.current = false;
+          setConnected(false);
         }
-      } catch {
-        // Ignore parse errors
       }
-    });
-
-    // Handle errors (connection lost, etc.)
-    es.onerror = () => {
-      if (!mounted) return;
-      setConnected(false);
-      es.close();
-
-      // Schedule reconnection by incrementing the counter, which re-runs this effect
-      reconnectTimer = setTimeout(() => {
-        if (mounted) {
-          setReconnectCount((c) => c + 1);
-        }
-      }, RECONNECT_DELAY_MS);
     };
+
+    // Immediate first poll, then every POLL_INTERVAL_MS
+    poll();
+    const interval = setInterval(poll, POLL_INTERVAL_MS);
 
     return () => {
       mounted = false;
-      es.close();
-      if (reconnectTimer) clearTimeout(reconnectTimer);
+      clearInterval(interval);
     };
-  }, [reconnectCount]);
+  }, []);
 
   return <SessionContext.Provider value={{ activeSessions: sessions, connected, metadataVersion, summonedChatIds }}>{children}</SessionContext.Provider>;
 }

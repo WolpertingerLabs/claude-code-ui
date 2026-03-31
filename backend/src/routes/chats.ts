@@ -848,12 +848,9 @@ chatsRouter.patch("/:id/summon", (req, res) => {
 
     clearChatListCache();
 
-    // Emit metadata update so dashboard refreshes
-    sessionRegistry.emit("change", {
-      event: "chat_metadata_updated",
-      chatId: chat.id,
-      data: { summon: null },
-    });
+    // Clear summon from registry and notify metadata change
+    sessionRegistry.clearSummon(chat.id);
+    sessionRegistry.notifyMetadata(chat.id, { summon: null });
 
     res.json(updatedChat);
   } catch (err: any) {
