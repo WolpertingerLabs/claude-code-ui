@@ -630,6 +630,48 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
     }
   }, [globalSessionActive]);
 
+  // Tab resume: clean up stale SSE connections and refresh data.
+  // When a tab is backgrounded, browsers kill fetch streams silently — the
+  // readSSE/connectToStream finally blocks never run, leaving abortRef stale.
+  // On resume we abort the dead controller (which triggers the existing
+  // cleanup chain: readSSE finally → connectToStream finally → abortRef=null,
+  // streaming=false), reset streamCompletedRef, and refetch data. The auto-
+  // reconnect useEffect above then handles reconnection on the next render
+  // cycle based on the fresh globalSessionActive from SessionContext's
+  // forced poll.
+  useEffect(() => {
+    const handleVisibilityResume = () => {
+      if (document.visibilityState !== "visible" || !id) return;
+
+      // Abort stale SSE connection — the cleanup chain handles the rest
+      if (abortRef.current) {
+        abortRef.current.abort();
+        // Don't null abortRef here — connectToStream's finally block does
+        // that after the abort chain completes asynchronously.
+      }
+
+      // Reset so auto-reconnect effect isn't blocked
+      streamCompletedRef.current = false;
+
+      // Refetch to catch up on anything missed while hidden
+      getChat(id).then((chatData) => {
+        if (currentIdRef.current !== id) return;
+        setChat(chatData);
+      });
+      Promise.all([getMessages(id), getPending(id)]).then(([msgs, pending]) => {
+        if (currentIdRef.current !== id) return;
+        setMessages(Array.isArray(msgs) ? msgs : []);
+        if (pending) {
+          setPendingAction(pending);
+          setStreaming(true);
+        }
+      });
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityResume);
+    return () => document.removeEventListener("visibilitychange", handleVisibilityResume);
+  }, [id]);
+
   // Fetch slash commands and plugins for the chat
   const loadSlashCommands = useCallback(async () => {
     if (!id) return;
