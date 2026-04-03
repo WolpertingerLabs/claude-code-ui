@@ -1482,48 +1482,49 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
         {/* Desktop: action buttons inline, right-aligned */}
         {!isMobile && (
           <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-            {/* Chat / Diff view toggle - only for git repos */}
-            {((!id && info?.is_git_repo) || (id && chat?.is_git_repo)) && (
-              <button
-                onClick={() => setViewMode(viewMode === "diff" ? "chat" : "diff")}
-                style={{
-                  background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
-                  color: viewMode === "diff" ? "var(--text-on-accent, #fff)" : "var(--text)",
-                  padding: "8px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.15s ease",
-                }}
-                title={viewMode === "diff" ? "Back to chat" : "Show git diff"}
-              >
-                {viewMode === "diff" ? <MessageSquare size={16} /> : <GitBranch size={16} />}
-              </button>
-            )}
-
-            {/* Debug metrics panel toggle */}
-            {id && (
-              <button
-                onClick={() => setViewMode(viewMode === "debug" ? "chat" : "debug")}
-                style={{
-                  background: viewMode === "debug" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
-                  color: viewMode === "debug" ? "var(--text-on-accent, #fff)" : "var(--text)",
-                  padding: "8px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
-                  cursor: "pointer",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  transition: "all 0.15s ease",
-                }}
-                title={viewMode === "debug" ? "Back to chat" : "Show debug metrics"}
-              >
-                <Activity size={16} />
-              </button>
+            {/* View mode toggle group - Git diff & Debug */}
+            {(id || info?.is_git_repo) && (
+              <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
+                {((!id && info?.is_git_repo) || (id && chat?.is_git_repo)) && (
+                  <button
+                    onClick={() => setViewMode(viewMode === "diff" ? "chat" : "diff")}
+                    style={{
+                      background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
+                      color: viewMode === "diff" ? "var(--text-on-accent, #fff)" : "var(--text)",
+                      padding: "8px",
+                      border: "none",
+                      borderRight: id ? "1px solid var(--border)" : "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.15s ease",
+                    }}
+                    title={viewMode === "diff" ? "Back to chat" : "Show git diff"}
+                  >
+                    {viewMode === "diff" ? <MessageSquare size={16} /> : <GitBranch size={16} />}
+                  </button>
+                )}
+                {id && (
+                  <button
+                    onClick={() => setViewMode(viewMode === "debug" ? "chat" : "debug")}
+                    style={{
+                      background: viewMode === "debug" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
+                      color: viewMode === "debug" ? "var(--text-on-accent, #fff)" : "var(--text)",
+                      padding: "8px",
+                      border: "none",
+                      cursor: "pointer",
+                      display: "flex",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      transition: "all 0.15s ease",
+                    }}
+                    title={viewMode === "debug" ? "Back to chat" : "Show debug metrics"}
+                  >
+                    <Activity size={16} />
+                  </button>
+                )}
+              </div>
             )}
 
             {id && userMessageIndices.length > 1 && (
@@ -1627,51 +1628,50 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
               </button>
             )}
 
-            {/* Slash Commands Modal Button */}
-            {allSlashCommands.length > 0 && (
+            {/* Slash commands & MCP tools group */}
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}>
+              {allSlashCommands.length > 0 && (
+                <button
+                  onClick={() => {
+                    setSlashCommandsModalTab("commands");
+                    setShowSlashCommandsModal(true);
+                  }}
+                  style={{
+                    background: "var(--bg-secondary)",
+                    color: "var(--text)",
+                    padding: "8px",
+                    border: "none",
+                    borderRight: "1px solid var(--border)",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                  }}
+                  title="View available slash commands"
+                >
+                  <Slash size={16} />
+                </button>
+              )}
               <button
                 onClick={() => {
-                  setSlashCommandsModalTab("commands");
+                  setSlashCommandsModalTab("tools");
                   setShowSlashCommandsModal(true);
                 }}
                 style={{
                   background: "var(--bg-secondary)",
                   color: "var(--text)",
                   padding: "8px",
-                  borderRadius: 6,
-                  border: "1px solid var(--border)",
+                  border: "none",
                   cursor: "pointer",
                   display: "flex",
                   alignItems: "center",
                   justifyContent: "center",
                 }}
-                title="View available slash commands"
+                title="View available MCP tools"
               >
-                <Slash size={16} />
+                <Wrench size={16} />
               </button>
-            )}
-
-            {/* MCP Tools Button */}
-            <button
-              onClick={() => {
-                setSlashCommandsModalTab("tools");
-                setShowSlashCommandsModal(true);
-              }}
-              style={{
-                background: "var(--bg-secondary)",
-                color: "var(--text)",
-                padding: "8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-              }}
-              title="View available MCP tools"
-            >
-              <Wrench size={16} />
-            </button>
+            </div>
 
             {/* Chat Permissions Button */}
             <button
@@ -1770,48 +1770,49 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             flexShrink: 0,
           }}
         >
-          {/* Chat / Diff view toggle - only for git repos */}
-          {((!id && info?.is_git_repo) || (id && chat?.is_git_repo)) && (
-            <button
-              onClick={() => setViewMode(viewMode === "diff" ? "chat" : "diff")}
-              style={{
-                background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
-                color: viewMode === "diff" ? "var(--text-on-accent, #fff)" : "var(--text)",
-                padding: "8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-              title={viewMode === "diff" ? "Back to chat" : "Show git diff"}
-            >
-              {viewMode === "diff" ? <MessageSquare size={16} /> : <GitBranch size={16} />}
-            </button>
-          )}
-
-          {/* Debug metrics panel toggle */}
-          {id && (
-            <button
-              onClick={() => setViewMode(viewMode === "debug" ? "chat" : "debug")}
-              style={{
-                background: viewMode === "debug" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
-                color: viewMode === "debug" ? "var(--text-on-accent, #fff)" : "var(--text)",
-                padding: "8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
-                cursor: "pointer",
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                flexShrink: 0,
-              }}
-              title={viewMode === "debug" ? "Back to chat" : "Show debug metrics"}
-            >
-              <Activity size={16} />
-            </button>
+          {/* View mode toggle group - Git diff & Debug */}
+          {(id || info?.is_git_repo) && (
+            <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", flexShrink: 0 }}>
+              {((!id && info?.is_git_repo) || (id && chat?.is_git_repo)) && (
+                <button
+                  onClick={() => setViewMode(viewMode === "diff" ? "chat" : "diff")}
+                  style={{
+                    background: viewMode === "diff" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
+                    color: viewMode === "diff" ? "var(--text-on-accent, #fff)" : "var(--text)",
+                    padding: "8px",
+                    border: "none",
+                    borderRight: id ? "1px solid var(--border)" : "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                  title={viewMode === "diff" ? "Back to chat" : "Show git diff"}
+                >
+                  {viewMode === "diff" ? <MessageSquare size={16} /> : <GitBranch size={16} />}
+                </button>
+              )}
+              {id && (
+                <button
+                  onClick={() => setViewMode(viewMode === "debug" ? "chat" : "debug")}
+                  style={{
+                    background: viewMode === "debug" ? "var(--accent)" : "var(--bg-secondary, var(--surface))",
+                    color: viewMode === "debug" ? "var(--text-on-accent, #fff)" : "var(--text)",
+                    padding: "8px",
+                    border: "none",
+                    cursor: "pointer",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent: "center",
+                    transition: "all 0.15s ease",
+                  }}
+                  title={viewMode === "debug" ? "Back to chat" : "Show debug metrics"}
+                >
+                  <Activity size={16} />
+                </button>
+              )}
+            </div>
           )}
 
           {id && userMessageIndices.length > 1 && (
@@ -1911,52 +1912,50 @@ export default function Chat({ onChatListRefresh }: ChatProps = {}) {
             </button>
           )}
 
-          {allSlashCommands.length > 0 && (
+          {/* Slash commands & MCP tools group */}
+          <div style={{ display: "flex", borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)", flexShrink: 0 }}>
+            {allSlashCommands.length > 0 && (
+              <button
+                onClick={() => {
+                  setSlashCommandsModalTab("commands");
+                  setShowSlashCommandsModal(true);
+                }}
+                style={{
+                  background: "var(--bg-secondary)",
+                  color: "var(--text)",
+                  padding: "8px",
+                  border: "none",
+                  borderRight: "1px solid var(--border)",
+                  cursor: "pointer",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+                title="View available slash commands"
+              >
+                <Slash size={16} />
+              </button>
+            )}
             <button
               onClick={() => {
-                setSlashCommandsModalTab("commands");
+                setSlashCommandsModalTab("tools");
                 setShowSlashCommandsModal(true);
               }}
               style={{
                 background: "var(--bg-secondary)",
                 color: "var(--text)",
                 padding: "8px",
-                borderRadius: 6,
-                border: "1px solid var(--border)",
+                border: "none",
                 cursor: "pointer",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                flexShrink: 0,
               }}
-              title="View available slash commands"
+              title="View available MCP tools"
             >
-              <Slash size={16} />
+              <Wrench size={16} />
             </button>
-          )}
-
-          {/* MCP Tools Button */}
-          <button
-            onClick={() => {
-              setSlashCommandsModalTab("tools");
-              setShowSlashCommandsModal(true);
-            }}
-            style={{
-              background: "var(--bg-secondary)",
-              color: "var(--text)",
-              padding: "8px",
-              borderRadius: 6,
-              border: "1px solid var(--border)",
-              cursor: "pointer",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              flexShrink: 0,
-            }}
-            title="View available MCP tools"
-          >
-            <Wrench size={16} />
-          </button>
+          </div>
 
           {/* Chat Permissions Button */}
           <button
