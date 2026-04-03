@@ -224,7 +224,7 @@ function buildMcpServerOptions(): { mcpServers: Record<string, any>; allowedTool
  * Create a HookCallback that executes a shell command.
  * Receives HookInput as JSON on stdin, expects HookJSONOutput as JSON on stdout.
  */
-function createCommandHookCallback(command: string, pluginPath: string, hookTimeout?: number): HookCallback {
+function createCommandHookCallback(command: string, pluginPath: string, hookTimeout?: number, hookAskOverride?: { reason: string }): HookCallback {
   return async (input: HookInput, toolUseId: string | undefined, { signal }: { signal: AbortSignal }) => {
     return new Promise<HookJSONOutput>((resolvePromise) => {
       const timeout = (hookTimeout ?? 60) * 1000;
@@ -236,6 +236,11 @@ function createCommandHookCallback(command: string, pluginPath: string, hookTime
         }
         try {
           const result = JSON.parse(stdout.trim());
+          // When a hook returns permissionDecision "ask", stash the reason
+          // so canUseTool can skip auto-approval and prompt the user.
+          if (hookAskOverride && result?.hookSpecificOutput?.permissionDecision === "ask") {
+            hookAskOverride.reason = result.hookSpecificOutput.permissionDecisionReason || "Hook requested user approval";
+          }
           resolvePromise(result);
         } catch {
           log.warn(`Hook command returned non-JSON output: ${command} — ${stdout.slice(0, 200)}`);
@@ -257,7 +262,7 @@ function createCommandHookCallback(command: string, pluginPath: string, hookTime
  * Build SDK hooks from all enabled plugins' hook configurations.
  * Merges hooks across plugins by event type, resolving ${CLAUDE_PLUGIN_ROOT} in commands.
  */
-function buildHookOptions(): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
+function buildHookOptions(hookAskOverride?: { reason: string }): Partial<Record<HookEvent, HookCallbackMatcher[]>> | undefined {
   try {
     const appPlugins = getEnabledAppPlugins();
     const mergedHooks: Partial<Record<HookEvent, HookCallbackMatcher[]>> = {};
@@ -280,7 +285,7 @@ function buildHookOptions(): Partial<Record<HookEvent, HookCallbackMatcher[]>> |
           for (const hookEntry of matcher.hooks) {
             if (hookEntry.type === "command" && hookEntry.command) {
               const resolvedCommand = hookEntry.command.replace(/\$\{CLAUDE_PLUGIN_ROOT\}/g, plugin.pluginPath);
-              callbacks.push(createCommandHookCallback(resolvedCommand, plugin.pluginPath, hookEntry.timeout ?? matcher.timeout));
+              callbacks.push(createCommandHookCallback(resolvedCommand, plugin.pluginPath, hookEntry.timeout ?? matcher.timeout, hookAskOverride));
               hookCount++;
             }
           }
@@ -433,36 +438,45 @@ function buildFormattedPrompt(prompt: string | any, imageMetadata?: { buffer: Bu
  * Build the canUseTool permission handler for the Claude SDK.
  * Uses a getter function for the tracking ID since it may change mid-session (new chat flow).
  */
-function buildCanUseTool(emitter: EventEmitter, getDefaultPermissions: () => DefaultPermissions | null, getTrackingId: () => string) {
+function buildCanUseTool(emitter: EventEmitter, getDefaultPermissions: () => DefaultPermissions | null, getTrackingId: () => string, hookAskOverride?: { reason: string }) {
   return async (
     toolName: string,
     input: Record<string, unknown>,
     { signal, suggestions }: { signal: AbortSignal; suggestions?: unknown[] },
   ): Promise<PermissionResult> => {
-    const category = categorizeToolPermission(toolName);
-    if (category) {
-      try {
-        const defaultPermissions = getDefaultPermissions();
-        log.info(`[PERM-DIAG] tool=${toolName}, category=${category}, permissions=${JSON.stringify(defaultPermissions)}`);
-        if (defaultPermissions && defaultPermissions[category]) {
-          const permission = defaultPermissions[category];
-          if (permission === "allow") {
-            log.info(`[PERM-DIAG] Auto-ALLOW: tool=${toolName}, category=${category}`);
-            return { behavior: "allow", updatedInput: input };
-          } else if (permission === "deny") {
-            log.info(`[PERM-DIAG] Auto-DENY: tool=${toolName}, category=${category}`);
-            return { behavior: "deny", message: `Auto-denied by default ${category} policy`, interrupt: true };
-          }
-        }
-        log.info(
-          `[PERM-DIAG] Falling through to ASK: tool=${toolName}, category=${category}, hasPerms=${!!defaultPermissions}, catValue=${defaultPermissions?.[category]}`,
-        );
-      } catch (err) {
-        log.info(`[PERM-DIAG] ERROR in permission lookup: tool=${toolName}, error=${err}`);
-        // If permission lookup fails, fall through to normal permission flow
-      }
+    // If a PreToolUse hook flagged "ask", skip auto-approval and prompt the user
+    // regardless of default permissions.
+    const hookOverrideReason = hookAskOverride?.reason || "";
+    if (hookOverrideReason) {
+      hookAskOverride!.reason = ""; // reset for next tool call
+      log.info(`[PERM-DIAG] Hook override ASK: tool=${toolName}, reason=${hookOverrideReason}`);
+      // Fall through to the permission prompt below
     } else {
-      log.info(`[PERM-DIAG] No category for tool=${toolName}, skipping permission check`);
+      const category = categorizeToolPermission(toolName);
+      if (category) {
+        try {
+          const defaultPermissions = getDefaultPermissions();
+          log.info(`[PERM-DIAG] tool=${toolName}, category=${category}, permissions=${JSON.stringify(defaultPermissions)}`);
+          if (defaultPermissions && defaultPermissions[category]) {
+            const permission = defaultPermissions[category];
+            if (permission === "allow") {
+              log.info(`[PERM-DIAG] Auto-ALLOW: tool=${toolName}, category=${category}`);
+              return { behavior: "allow", updatedInput: input };
+            } else if (permission === "deny") {
+              log.info(`[PERM-DIAG] Auto-DENY: tool=${toolName}, category=${category}`);
+              return { behavior: "deny", message: `Auto-denied by default ${category} policy`, interrupt: true };
+            }
+          }
+          log.info(
+            `[PERM-DIAG] Falling through to ASK: tool=${toolName}, category=${category}, hasPerms=${!!defaultPermissions}, catValue=${defaultPermissions?.[category]}`,
+          );
+        } catch (err) {
+          log.info(`[PERM-DIAG] ERROR in permission lookup: tool=${toolName}, error=${err}`);
+          // If permission lookup fails, fall through to normal permission flow
+        }
+      } else {
+        log.info(`[PERM-DIAG] No category for tool=${toolName}, skipping permission check`);
+      }
     }
 
     return new Promise<PermissionResult>((resolve) => {
@@ -662,7 +676,11 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
   // Always build plugin options (includes app-wide plugins even when no per-directory plugins are active)
   const plugins = buildPluginOptions(folder, activePlugins);
   const mcpOpts = buildMcpServerOptions();
-  const hookOpts = buildHookOptions();
+  // Shared state: when a PreToolUse hook returns permissionDecision "ask",
+  // the reason is stashed here so canUseTool can skip auto-approval and
+  // prompt the user instead.
+  const hookAskOverride: { reason: string } = { reason: "" };
+  const hookOpts = buildHookOptions(hookAskOverride);
 
   // Build MCP servers map: start with configured servers, add Callboard agent tools if this is an agent session
   const mcpServers: Record<string, any> = mcpOpts ? { ...mcpOpts.mcpServers } : {};
@@ -783,7 +801,7 @@ export async function sendMessage(opts: SendMessageOptions): Promise<EventEmitte
         // when the backend was started from within a Claude Code session
         CLAUDECODE: undefined,
       },
-      canUseTool: buildCanUseTool(emitter, getDefaultPermissions, () => trackingId),
+      canUseTool: buildCanUseTool(emitter, getDefaultPermissions, () => trackingId, hookAskOverride),
       stderr: (data: string) => {
         log.warn(`[SDK stderr] ${data.trimEnd()}`);
       },
